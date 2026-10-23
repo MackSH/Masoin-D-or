@@ -239,7 +239,8 @@ function burst(x, y, n, { confetti = 0, rain = false } = {}) {
     : { k: 'coin', x: x + rand(-40, 40), y, vx: rand(-4.5, 4.5), vy: rand(-14, -5), r: rand(6, 10), rot: rand(0, 6.28), vr: rand(-.3, .3) });
   for (let i = 0; i < confetti; i++) parts.push({ k: 'conf', x: x + rand(-30, 30), y, vx: rand(-7, 7), vy: rand(-16, -6), w: rand(5, 9), hgt: rand(9, 15), rot: rand(0, 6.28), vr: rand(-.25, .25), c: CONFETTI[i % CONFETTI.length], drag: rand(.96, .99) });
   for (let i = 0; i < confetti / 2; i++) { const a = rand(0, 6.28), v = rand(3, 9); parts.push({ k: 'spark', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 }); }
-  if (!fraf) fraf = requestAnimationFrame(fxLoop);
+  // Le calque n'existe à l'écran que pendant l'animation : Safari colore ses barres d'après les calques fixés.
+  if (!fraf) { fx.hidden = false; fraf = requestAnimationFrame(fxLoop); }
 }
 function fxLoop() {
   fctx.clearRect(0, 0, innerWidth, innerHeight);
@@ -262,7 +263,7 @@ function fxLoop() {
     fctx.beginPath(); fctx.arc(0, 0, p.r * .55, 0, 6.283); fctx.strokeStyle = '#b98a2c'; fctx.stroke(); fctx.restore();
   }
   fraf = parts.length ? requestAnimationFrame(fxLoop) : 0;
-  if (!fraf) fctx.clearRect(0, 0, innerWidth, innerHeight);
+  if (!fraf) { fctx.clearRect(0, 0, innerWidth, innerHeight); fx.hidden = true; }
 }
 // Montant qui s'envole au-dessus de l'élément gagnant.
 function floatText(el, text, cls = 'good') {
@@ -321,8 +322,9 @@ function flyCoins(fromEl, toEl, n = 10) {
 }
 
 /* ---------- Fond animé ---------- */
-// Poussière d'or qui flotte et scintille derrière l'interface (léger : ~30 images/s, peu de particules).
-(function ambient() {
+// Fond opaque de la page : lueurs colorées qui dérivent (aurore) et poussière d'or qui scintille
+// (léger : ~30 images/s, peu de particules).
+const ambient = (function () {
   const cv = $('#amb'), ctx = cv.getContext('2d'); let W = 0, H = 0, dots = [], last = 0;
   function fit() {
     const d = Math.min(devicePixelRatio || 1, 1.5); W = innerWidth; H = innerHeight;
@@ -331,9 +333,17 @@ function flyCoins(fromEl, toEl, n = 10) {
     dots = Array.from({ length: n }, () => ({ x: rand(0, W), y: rand(0, H), r: rand(.6, 2.2), v: rand(.08, .35), ph: rand(0, 6.28), sw: rand(.2, .8) }));
     if (reduce) draw(0);
   }
+  const AURORA = [[.2, .12, '212,168,75', .18, .38], [.85, .3, '19,137,90', .22, .42], [.5, .95, '209,44,69', .16, .4]];
   function draw(now) {
     ctx.clearRect(0, 0, W, H);
-    const rgb = document.documentElement.dataset.theme === 'light' ? '176,128,30' : '246,221,147';
+    const light = document.documentElement.dataset.theme === 'light', k = light ? .55 : 1, R = Math.max(W, H);
+    AURORA.forEach(([x, y, c, a, r], i) => {
+      const cx = (x + .05 * Math.sin(now / 9000 + i * 2)) * W, cy = (y + .04 * Math.cos(now / 11000 + i)) * H;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * r);
+      g.addColorStop(0, `rgba(${c},${a * k})`); g.addColorStop(1, `rgba(${c},0)`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    });
+    const rgb = light ? '176,128,30' : '246,221,147';
     for (const p of dots) {
       if (!reduce) { p.y -= p.v; p.x += Math.sin(now / 2400 + p.ph) * p.sw * .3; if (p.y < -6) { p.y = H + 6; p.x = rand(0, W); } }
       const a = .25 + .55 * (.5 + .5 * Math.sin(now / 700 + p.ph * 3));
@@ -345,6 +355,7 @@ function flyCoins(fromEl, toEl, n = 10) {
   function loop(now) { if (!document.hidden && now - last > 33) { last = now; draw(now); } requestAnimationFrame(loop); }
   addEventListener('resize', fit); fit();
   if (!reduce) requestAnimationFrame(loop);
+  return { redraw: () => draw(performance.now()) };
 })();
 
 /* ---------- Thème ---------- */
@@ -355,6 +366,7 @@ function applyTheme(t) {
   $('use', themeBtn).setAttribute('href', light ? '#i-moon' : '#i-sun');
   themeBtn.setAttribute('aria-label', light ? 'Passer au thème sombre' : 'Passer au thème clair');
   $('#thmSwitch').setAttribute('aria-checked', String(!light));
+  ambient.redraw();
 }
 function toggleTheme() {
   const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
