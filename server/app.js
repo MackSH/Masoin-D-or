@@ -6,6 +6,7 @@ const { createCasino, HttpError, GAMES } = require('./casino');
 
 const SESSION_DAYS = 30;
 const COOKIE = 'md_sid';
+const HEADER = 'x-md-session'; // même mécanisme que la fonction Edge Supabase
 
 /* ---------- Mots de passe ---------- */
 function hashPassword(pw) {
@@ -22,6 +23,8 @@ function checkPassword(pw, stored) {
 
 const cleanName = v => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 18);
 const parseCookies = h => Object.fromEntries(String(h || '').split(';').map(p => p.trim().split('=')).filter(p => p[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
+// Jeton de session : en-tête X-MD-Session, ou cookie.
+const sessionToken = req => req.get(HEADER) || parseCookies(req.headers.cookie)[COOKIE];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function createApp(db, { now = () => Date.now(), secureCookies = false } = {}) {
@@ -49,9 +52,10 @@ function createApp(db, { now = () => Date.now(), secureCookies = false } = {}) {
     const token = crypto.randomBytes(32).toString('base64url'), t = now();
     st.newSession.run(token, userId, t, t + SESSION_DAYS * 864e5);
     res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: secureCookies, maxAge: SESSION_DAYS * 864e5, path: '/' });
+    return token;
   }
   function auth(req, res, next) {
-    const token = parseCookies(req.headers.cookie)[COOKIE];
+    const token = sessionToken(req);
     const row = token && st.session.get(token, now());
     if (!row) return next(new HttpError(401, 'Connectez-vous pour jouer.'));
     req.uid = row.user_id; req.token = token; next();
@@ -86,12 +90,11 @@ function createApp(db, { now = () => Date.now(), secureCookies = false } = {}) {
     if (st.byName.get(login)) throw new HttpError(409, 'Cet identifiant est déjà pris.');
     const name = cleanName(req.body.name) || login.slice(0, 18);
     // Un invité connecté qui crée un compte garde son solde et son historique.
-    const token = parseCookies(req.headers.cookie)[COOKIE], cur = token && st.session.get(token, now());
+    const token = sessionToken(req), cur = token && st.session.get(token, now());
     const guest = cur && st.user.get(cur.user_id);
-    let uid;
-    if (guest && guest.is_guest) { st.upgrade.run(login, hashPassword(password), name, guest.id); uid = guest.id; }
-    else { uid = Number(st.newUser.run(login, hashPassword(password), name, 0, now()).lastInsertRowid); startSession(res, uid); }
-    return profile(uid);
+    if (guest && guest.is_guest) { st.upgrade.run(login, hashPassword(password), name, guest.id); return { ...profile(guest.id), token }; }
+    const uid = Number(st.newUser.run(login, hashPassword(password), name, 0, now()).lastInsertRowid);
+    return { ...profile(uid), token: startSession(res, uid) };
   }));
 
   api.post('/auth/login', wrap((req, res) => {
@@ -99,25 +102,23 @@ function createApp(db, { now = () => Date.now(), secureCookies = false } = {}) {
     const { username, password } = req.body || {};
     const u = st.byName.get(String(username || '').trim());
     if (!u || typeof password !== 'string' || !checkPassword(password, u.pass_hash)) { failed(req); throw new HttpError(401, 'Identifiant ou mot de passe incorrect.'); }
-    startSession(res, u.id);
-    return profile(u.id);
+    return { ...profile(u.id), token: startSession(res, u.id) };
   }));
 
   api.post('/auth/guest', wrap((req, res) => {
     const uid = Number(st.newUser.run(null, null, 'Invité', 1, now()).lastInsertRowid);
-    startSession(res, uid);
-    return profile(uid);
+    return { ...profile(uid), token: startSession(res, uid) };
   }));
 
   api.post('/auth/logout', (req, res) => {
-    const token = parseCookies(req.headers.cookie)[COOKIE];
+    const token = sessionToken(req);
     if (token) st.delSession.run(token);
     res.clearCookie(COOKIE, { path: '/' }).json({ ok: true });
   });
 
   // Session courante sans erreur 401 : utilisé au chargement de la page.
   api.get('/auth/session', wrap(req => {
-    const token = parseCookies(req.headers.cookie)[COOKIE], row = token && st.session.get(token, now());
+    const token = sessionToken(req), row = token && st.session.get(token, now());
     if (!row) return { user: null };
     casino.crashResolve(row.user_id);
     return profile(row.user_id);
@@ -175,7 +176,12 @@ function createApp(db, { now = () => Date.now(), secureCookies = false } = {}) {
     if (left !== null) setTimeout(() => { try { casino.crashResolve(req.uid); } catch (e) {} }, left + 10).unref?.();
     return out;
   }));
-  api.post('/games/crash/cashout', wrap(req => casino.crashCashout(req.uid)));
+  api.post('/games/crash/cashout', wrap(req => {
+    // La manche a pu se terminer juste avant (explosion ou encaissement automatique) : on renvoie son résultat.
+    const round = body(req).round;
+    if (round && casino.crashRemaining(req.uid, round) === null) { const done = casino.crashResult(req.uid, round); if (done) return done; }
+    return casino.crashCashout(req.uid);
+  }));
   // Attente longue : répond quand la fusée explose, avec le point d'explosion.
   api.get('/games/crash/wait', wrap(async req => {
     const round = Number(req.query.round);
@@ -189,6 +195,8 @@ function createApp(db, { now = () => Date.now(), secureCookies = false } = {}) {
 
   app.use('/api', api);
   app.use('/api', (req, res) => res.status(404).json({ error: 'Route inconnue.' }));
+  // En local, le site parle à ce serveur plutôt qu'à la fonction Edge Supabase.
+  app.get('/config.js', (req, res) => res.type('js').send("window.MD_CONFIG = { apiUrl: '/api' };\n"));
   app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
 
   // Erreurs : message lisible pour le joueur, détail technique dans la console.

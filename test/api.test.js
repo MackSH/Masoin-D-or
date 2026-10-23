@@ -5,54 +5,61 @@ const { open } = require('../server/db');
 const { createApp } = require('../server/app');
 const { minesMult, bjTotal } = require('../server/casino');
 
+// Par défaut, les tests démarrent le serveur Node + SQLite en mémoire.
+// Avec API_URL (et API_REGION), ils visent une API déjà déployée, par exemple la fonction Edge Supabase.
 let server, base, db;
 before(async () => {
+  if (process.env.API_URL) { base = process.env.API_URL.replace(/\/$/, ''); return; }
   db = open(':memory:');
   server = createApp(db).listen(0);
   await new Promise(r => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
-after(() => { server.close(); db.close(); });
+after(() => { if (server) { server.close(); db.close(); } });
 
-// Petit client HTTP qui garde le cookie de session.
+// Petit client HTTP qui garde le jeton de session.
 function client() {
-  let cookie = '';
+  let token = '';
   return async function call(path, body, method) {
-    const res = await fetch(base + path, {
+    const url = new URL(base + path);
+    if (process.env.API_REGION) url.searchParams.set('forceFunctionRegion', process.env.API_REGION);
+    const res = await fetch(url, {
       method: method || (body !== undefined ? 'POST' : 'GET'),
-      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { Cookie: cookie } : {}) },
+      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { 'X-MD-Session': token } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined
     });
-    const set = res.headers.get('set-cookie');
-    if (set) cookie = set.split(';')[0];
-    return { status: res.status, body: await res.json() };
+    const data = await res.json();
+    if (data.token) token = data.token;
+    if (path === '/auth/logout') token = '';
+    return { status: res.status, body: data };
   };
 }
 const balanceOf = async c => (await c('/me')).body.wallet.balance;
+const SUF = Date.now().toString(36); // identifiants uniques quand la base persiste
 const approx = (a, b) => assert.ok(Math.abs(a - b) < 1e-6, `${a} ≠ ${b}`);
 
 test('inscription, connexion, déconnexion', async () => {
   const c = client();
   assert.equal((await c('/me')).status, 401);
   assert.deepEqual((await c('/auth/session')).body, { user: null });
-  const r = await c('/auth/register', { username: 'alice', password: 'secret1', name: 'Alice' });
+  const r = await c('/auth/register', { username: `alice${SUF}`, password: 'secret1', name: 'Alice' });
   assert.equal(r.status, 200);
   assert.equal(r.body.user.name, 'Alice');
   assert.equal(r.body.wallet.balance, 1000);
-  assert.equal((await c('/auth/register', { username: 'ALICE', password: 'secret1' })).status, 409);
+  assert.equal((await c('/auth/register', { username: `ALICE${SUF}`, password: 'secret1' })).status, 409);
   await c('/auth/logout', {});
   assert.equal((await c('/me')).status, 401);
-  assert.equal((await c('/auth/login', { username: 'alice', password: 'mauvais' })).status, 401);
-  const ok = await c('/auth/login', { username: 'Alice', password: 'secret1' });
+  assert.equal((await c('/auth/login', { username: `alice${SUF}`, password: 'mauvais' })).status, 401);
+  const ok = await c('/auth/login', { username: `Alice${SUF}`, password: 'secret1' });
   assert.equal(ok.status, 200);
-  assert.equal((await c('/me')).body.user.username, 'alice');
+  assert.equal((await c('/me')).body.user.username, `alice${SUF}`);
 });
 
 test('un invité qui crée un compte garde son solde', async () => {
   const c = client();
   await c('/auth/guest', {});
   await c('/wallet/deposit', { amount: 500 });
-  const r = await c('/auth/register', { username: 'bob_guest', password: 'secret1' });
+  const r = await c('/auth/register', { username: `bob${SUF}`, password: 'secret1' });
   assert.equal(r.body.user.guest, false);
   assert.equal(r.body.wallet.balance, 1500);
 });
@@ -194,6 +201,10 @@ test('fusée : encaissement manuel, auto et explosion', async () => {
   // Le résultat reste consultable via l'attente longue.
   const w = (await c(`/games/crash/wait?round=${l.body.round}`)).body;
   assert.equal(w.crashAt, out.crashAt);
+  // Encaisser une manche déjà terminée renvoie son résultat au lieu d'une erreur.
+  const again = await c('/games/crash/cashout', { round: l.body.round });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.crashAt, out.crashAt);
 
   // Encaissement automatique à ×1,01 : l'attente longue renvoie l'issue.
   const l2 = (await c('/games/crash/launch', { bet: 10, auto: 1.01 })).body;

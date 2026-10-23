@@ -1,12 +1,32 @@
 # Maison d’Or
 
-Casino en jetons virtuels (gratuits et sans valeur réelle) : 8 jeux, comptes joueurs et backend Node.js + SQLite.
+Casino en jetons virtuels (gratuits et sans valeur réelle) : 8 jeux et comptes joueurs. En ligne, le backend et la base tournent sur Supabase (fonction Edge + Postgres). En local, un serveur Node.js + SQLite équivalent.
 
-## Démarrer
+## En ligne
+
+| Élément          | Où                                                                 |
+| ---------------- | ------------------------------------------------------------------ |
+| Base de données  | Supabase, projet « Maison d'Or » (`lzximhhtsttrlhfvwiqb`, Paris), schéma privé `casino` |
+| API (backend)    | Fonction Edge Supabase `api` : `https://lzximhhtsttrlhfvwiqb.supabase.co/functions/v1/api` |
+| Site web         | GitHub Pages, publié par `.github/workflows/pages.yml` depuis `public/` |
+
+Supabase n'héberge pas de pages HTML (ses fonctions Edge et son Storage les servent en texte brut), d'où GitHub Pages pour le site. Le site trouve l'API grâce à `public/config.js`.
+
+Mettre à jour :
+
+- **API** : `supabase functions deploy api` (avec la CLI Supabase, depuis la racine du dépôt).
+- **Schéma** : ajouter un fichier dans `supabase/migrations/`, puis `supabase db push`.
+- **Site** : pousser sur `main` ; le workflow GitHub Pages republie `public/`.
+
+La fonction s'exécute dans la région de la base (`forceFunctionRegion=eu-west-3`, réglé dans `config.js`), ce qui divise la latence par 5 à 8. Pour restreindre l'API au domaine du site, définissez le secret `ALLOWED_ORIGINS` de la fonction (par exemple `https://macksh.github.io`).
+
+Tester l'API en ligne : `API_URL=https://lzximhhtsttrlhfvwiqb.supabase.co/functions/v1/api API_REGION=eu-west-3 npm test`.
+
+## En local
 
 ```bash
 npm install
-npm start          # http://localhost:3000
+npm start          # http://localhost:3000, avec une base SQLite locale
 ```
 
 Variables d’environnement :
@@ -35,7 +55,10 @@ Tests : `npm test`.
 ## Architecture
 
 ```
-server/
+supabase/
+  migrations/ schéma Postgres
+  functions/api/  API en ligne (Deno) : index.ts (routes, comptes), casino.ts (jeux)
+server/       équivalent local Node.js + SQLite
   db.js       schéma SQLite (better-sqlite3)
   casino.js   portefeuille et logique de tous les jeux
   app.js      API Express, comptes et sessions
@@ -44,14 +67,14 @@ public/       interface (index.html, styles.css, app.js)
 test/         tests de l’API (node:test)
 ```
 
-Le serveur fait autorité : tout tirage utilise `crypto.randomInt`, et les mises et gains sont réglés dans une transaction SQLite. Les montants sont stockés en centimes de jeton. Le navigateur se contente d’animer le résultat reçu. Les informations secrètes restent sur le serveur jusqu’à la fin de la manche : la position des mines, la carte cachée de la banque et le point d’explosion de la fusée.
+Le serveur fait autorité : tout tirage utilise `crypto.randomInt`, et les mises et gains sont réglés dans une transaction (Postgres en ligne, SQLite en local). Les montants sont stockés en centimes de jeton. Le navigateur se contente d’animer le résultat reçu. Les informations secrètes restent sur le serveur jusqu’à la fin de la manche : la position des mines, la carte cachée de la banque et le point d’explosion de la fusée.
 
 Les parties à état (Blackjack, Mines, Fusée) sont enregistrées dans `active_rounds`. Si vous quittez le jeu ou rechargez la page, la partie reprend. Si un vol de la fusée se termine pendant que la page est fermée, il est quand même réglé (encaissement automatique ou explosion), y compris après un redémarrage du serveur.
 
 ### Tables
 
 - `users` : compte, solde, statistiques (misé, gagné, parties, meilleur gain), préférences (favoris, mises, son)
-- `sessions` : jetons de session (cookie `httpOnly`, 30 jours)
+- `sessions` : jetons de session (30 jours), envoyés dans l'en-tête `X-MD-Session`
 - `transactions` : historique de chaque partie, dépôt et remise à zéro
 - `active_rounds` : parties en cours
 

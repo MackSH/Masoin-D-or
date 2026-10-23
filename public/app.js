@@ -18,16 +18,33 @@ const short = x => x >= 1000 ? num(x / 1000, x % 1000 ? 1 : 0) + 'k' : String(r2
 const DEFAULT = { name: 'Joueur', username: null, guest: false, balance: 0, favs: ['slots'], stats: { wagered: 0, won: 0, played: 0, best: 0 }, hist: [], sound: true, bets: {} };
 let S = JSON.parse(JSON.stringify(DEFAULT)), authed = false;
 class ApiError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
+// Adresse de l'API (config.js) : la fonction Edge Supabase en ligne, « /api » avec le serveur Node local.
+const API_URL = (window.MD_CONFIG && window.MD_CONFIG.apiUrl) || '/api';
+// Exécute la fonction Edge dans la région de la base de données (beaucoup moins d'allers-retours lents).
+const apiUrl = path => {
+  const u = new URL(API_URL + path, location.href), region = window.MD_CONFIG && window.MD_CONFIG.region;
+  if (region) u.searchParams.set('forceFunctionRegion', region);
+  return u.href;
+};
+// Jeton de session, envoyé dans l'en-tête X-MD-Session (le site et l'API sont sur des domaines différents).
+const TOKEN_KEY = 'maisondor:session';
+const session = {
+  get() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return session.mem || ''; } },
+  set(t) { session.mem = t; try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+};
 async function api(path, body, { method, keepalive } = {}) {
   let r;
+  const headers = {}, token = session.get();
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (token) headers['X-MD-Session'] = token;
   try {
-    r = await fetch('/api' + path, {
-      method: method || (body !== undefined ? 'POST' : 'GET'), credentials: 'same-origin', keepalive,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : {}, body: body !== undefined ? JSON.stringify(body) : undefined
+    r = await fetch(apiUrl(path), {
+      method: method || (body !== undefined ? 'POST' : 'GET'), keepalive, headers, body: body !== undefined ? JSON.stringify(body) : undefined
     });
   } catch (e) { throw new ApiError('Connexion au serveur impossible. Vérifiez votre réseau.', 0); }
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) { if (r.status === 401 && !path.startsWith('/auth')) needAuth(); throw new ApiError(data.error || 'Erreur du serveur.', r.status); }
+  if (!r.ok) { if (r.status === 401 && !path.startsWith('/auth')) { session.set(''); needAuth(); } throw new ApiError(data.error || 'Erreur du serveur.', r.status); }
+  if (data.token) session.set(data.token);
   return data;
 }
 // Appel d'un jeu (POST si body est fourni) : affiche l'erreur et renvoie null en cas d'échec.
@@ -297,7 +314,7 @@ $('#popLogout').addEventListener('click', async () => {
   closePop();
   if (S.guest && !confirm('Vous jouez en invité : en vous déconnectant, vous perdrez l’accès à ces jetons. Continuer ?')) return;
   await api('/auth/logout', {}).catch(() => {});
-  needAuth();
+  session.set(''); needAuth();
 });
 
 /* ================= Contrôle de mise ================= */
@@ -744,7 +761,7 @@ function gCrash(root) {
   async function cashout() {
     if (phase !== 'run' || cashed || cashing) return;
     cashing = true; ui(); go.textContent = 'Encaissement…';
-    const r = await play('/games/crash/cashout', {});
+    const r = await play('/games/crash/cashout', { round });
     cashing = false;
     if (r) learn(r); else waitEnd(round);
     if (alive) ui();
@@ -768,7 +785,7 @@ function gCrash(root) {
   return () => {
     alive = false; cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener('keydown', key);
     if (phase === 'run' && !cashed && !result) {
-      api('/games/crash/cashout', {}, { keepalive: true }).then(r => {
+      api('/games/crash/cashout', { round }, { keepalive: true }).then(r => {
         W.settle('crash', r);
         toast(r.cashedAt > 0 ? `Fusée encaissée automatiquement à ${fmtX(r.cashedAt)}.` : `La fusée a explosé à ${fmtX(r.crashAt)}.`);
       }).catch(() => api('/me').then(p => { S.hist = p.hist; W.sync(p.wallet); }).catch(() => {}));
@@ -905,7 +922,7 @@ function gPlinko(root) {
       ctx.fillText(String(m).replace('.', ','), x + sw / 2, y + sh / 2);
     });
     for (const b of balls) {
-      const el = now - b.t0, i = Math.min(b.pts.length - 2, Math.floor(el / b.step)), f = Math.min(1, (el - i * b.step) / b.step);
+      const el = Math.max(0, now - b.t0), i = Math.min(b.pts.length - 2, Math.floor(el / b.step)), f = Math.min(1, (el - i * b.step) / b.step);
       if (i > b.last) { b.last = i; if (i < b.pts.length - 1) sfx.peg(); }
       const [x0, y0] = b.pts[i], [x1, y1] = b.pts[i + 1], hop = i === 0 ? 0 : dy * .35;
       const x = x0 + (x1 - x0) * f, y = y0 + (y1 - y0) * f - hop * 4 * f * (1 - f);

@@ -1,0 +1,6 @@
+# Configuration pour la CLI Supabase (`supabase functions deploy api`).
+project_id = "lzximhhtsttrlhfvwiqb"
+
+[functions.api]
+# La fonction gère elle-même l'authentification (jeton X-MD-Session).
+verify_jwt = false
