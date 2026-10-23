@@ -1,0 +1,30 @@
+{
+  "name": "masoin-d-or",
+  "version": "1.0.0",
+  "description": "Maison d’Or : casino en jetons virtuels, backend Node.js + SQLite",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MackSH/Masoin-D-or.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/MackSH/Masoin-D-or/issues"
+  },
+  "homepage": "https://github.com/MackSH/Masoin-D-or#readme",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^4.22.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

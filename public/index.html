@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maison d’Or</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <radialGradient id="gCherry" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ff7a7a"/><stop offset=".5" stop-color="#d3122f"/><stop offset="1" stop-color="#730919"/></radialGradient>
+    <linearGradient id="gLemon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff27a"/><stop offset=".55" stop-color="#f5c518"/><stop offset="1" stop-color="#c99a08"/></linearGradient>
+    <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0b0"/><stop offset=".5" stop-color="#e6b94a"/><stop offset="1" stop-color="#9a7420"/></linearGradient>
+    <linearGradient id="gSeven" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8878"/><stop offset=".5" stop-color="#d12c45"/><stop offset="1" stop-color="#8e1428"/></linearGradient>
+    <linearGradient id="gLeaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7acb6a"/><stop offset="1" stop-color="#2f7d32"/></linearGradient>
+    <radialGradient id="gCoin" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff1b8"/><stop offset=".55" stop-color="#d4a84b"/><stop offset="1" stop-color="#8a6a22"/></radialGradient>
+
+    <symbol id="s-cherry" viewBox="0 0 100 100">
+      <path d="M32 66 C36 44 44 26 58 12" stroke="#3e7b3b" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M70 68 C68 46 62 28 58 12" stroke="#3e7b3b" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M58 12 C66 4 82 6 90 16 C78 22 64 20 58 12Z" fill="url(#gLeaf)"/>
+      <circle cx="30" cy="72" r="19" fill="url(#gCherry)"/><circle cx="70" cy="74" r="19" fill="url(#gCherry)"/>
+      <ellipse cx="23" cy="65" rx="5" ry="3" fill="#fff" opacity=".6" transform="rotate(-35 23 65)"/>
+      <ellipse cx="63" cy="67" rx="5" ry="3" fill="#fff" opacity=".6" transform="rotate(-35 63 67)"/>
+    </symbol>
+    <symbol id="s-lemon" viewBox="0 0 100 100">
+      <g transform="rotate(-24 50 56)">
+        <ellipse cx="15" cy="56" rx="7" ry="5" fill="#d9a90c" stroke="#a37a06" stroke-width="2"/>
+        <ellipse cx="85" cy="56" rx="7" ry="5" fill="#d9a90c" stroke="#a37a06" stroke-width="2"/>
+        <ellipse cx="50" cy="56" rx="35" ry="27" fill="url(#gLemon)" stroke="#a37a06" stroke-width="2.5"/>
+        <path d="M28 42 C36 33 50 31 62 34" stroke="#fffbd0" stroke-width="5" stroke-linecap="round" fill="none" opacity=".75"/>
+      </g>
+      <path d="M68 24 C72 12 86 10 93 15 C88 26 77 30 68 24Z" fill="url(#gLeaf)"/>
+    </symbol>
+    <symbol id="s-bell" viewBox="0 0 100 100">
+      <circle cx="50" cy="12" r="6" fill="url(#gGold)" stroke="#8a6a22" stroke-width="2"/>
+      <path d="M50 16 C68 16 76 30 76 48 C76 64 82 72 90 80 L10 80 C18 72 24 64 24 48 C24 30 32 16 50 16Z" fill="url(#gGold)" stroke="#8a6a22" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M36 30 C32 38 31 48 31 58" stroke="#fffbe0" stroke-width="5" stroke-linecap="round" fill="none" opacity=".65"/>
+      <circle cx="50" cy="87" r="8" fill="url(#gGold)" stroke="#8a6a22" stroke-width="2"/>
+    </symbol>
+    <symbol id="s-gem" viewBox="0 0 100 100">
+      <g stroke="#0f4a66" stroke-width="1.8" stroke-linejoin="round">
+        <polygon points="8,42 28,20 40,42" fill="#7fe0e6"/><polygon points="28,20 72,20 60,42 40,42" fill="#c9f7fa"/>
+        <polygon points="72,20 92,42 60,42" fill="#5cc4d6"/><polygon points="8,42 40,42 50,88" fill="#2a8fb0"/>
+        <polygon points="40,42 60,42 50,88" fill="#8be8f0"/><polygon points="60,42 92,42 50,88" fill="#1f6f95"/>
+      </g>
+    </symbol>
+    <symbol id="s-bar" viewBox="0 0 100 100">
+      <rect x="6" y="28" width="88" height="44" rx="8" fill="#1b1410" stroke="url(#gGold)" stroke-width="4"/>
+      <rect x="12" y="34" width="76" height="32" rx="4" fill="none" stroke="#8a6a22" stroke-width="1.5"/>
+      <text x="50" y="60" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="900" font-size="26" letter-spacing="3" fill="url(#gGold)">BAR</text>
+    </symbol>
+    <symbol id="s-seven" viewBox="0 0 100 100">
+      <path d="M18 14 H84 V30 L52 88 H30 L60 32 H18 Z" fill="url(#gSeven)" stroke="#5e0b1a" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M26 21 H76" stroke="#ffd0c8" stroke-width="3.5" stroke-linecap="round" opacity=".7"/>
+    </symbol>
+    <symbol id="i-bomb" viewBox="0 0 100 100">
+      <path d="M60 34 C66 20 78 16 86 20" stroke="#c9a35a" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <rect x="52" y="30" width="16" height="12" rx="3" transform="rotate(35 60 36)" fill="#3a3a3a"/>
+      <circle cx="44" cy="60" r="30" fill="#1b1b1b"/>
+      <ellipse cx="33" cy="48" rx="8" ry="5" fill="#fff" opacity=".35" transform="rotate(-35 33 48)"/>
+      <path d="M88 8 L90 16 L98 18 L90 20 L88 28 L86 20 L78 18 L86 16Z" fill="#ffb547"/>
+    </symbol>
+    <symbol id="i-coin" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="11" fill="url(#gCoin)" stroke="#8a6a22" stroke-width="1"/>
+      <circle cx="12" cy="12" r="7.6" fill="none" stroke="#8a6a22" stroke-width="1.2" opacity=".7"/>
+      <path d="M12 7.5 L15 12 L12 16.5 L9 12Z" fill="#8a6a22" opacity=".85"/>
+    </symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.7 6.3.9-4.55 4.43 1.07 6.27L12 17.1l-5.62 2.95 1.07-6.27L2.9 9.4l6.3-.9z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <button class="player" id="playerBtn" aria-label="Modifier votre nom">
+      <span class="avatar" id="avatar">J</span>
+      <span class="pinfo"><span class="pname" id="pname">Joueur</span><span class="plevel" id="plevel">Niveau 1</span></span>
+    </button>
+    <button class="balance" id="balBtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Voir le solde">
+      <svg aria-hidden="true"><use href="#i-coin"/></svg><span id="balTxt">0,00</span>
+    </button>
+    <button class="plus" id="plusBtn" aria-label="Ajouter des jetons"><svg aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </div>
+</header>
+
+<div class="pop" id="balPop" role="dialog" aria-label="Votre solde" hidden>
+  <p class="pop-lab">Solde disponible</p>
+  <p class="pop-bal"><svg aria-hidden="true"><use href="#i-coin"/></svg><span id="popBal">0,00</span></p>
+  <div class="pop-stats">
+    <div class="stat"><span>Résultat net</span><b id="stNet">0,00</b></div>
+    <div class="stat"><span>Meilleur gain</span><b id="stBest">0,00</b></div>
+    <div class="stat"><span>Total misé</span><b id="stWag">0,00</b></div>
+    <div class="stat"><span>Parties jouées</span><b id="stPlayed">0</b></div>
+  </div>
+  <div class="pop-actions">
+    <button class="btn-primary sm" id="popAdd">Ajouter</button>
+    <button class="btn" id="popReset">Réinitialiser</button>
+  </div>
+  <div class="pop-sec">
+    <p class="pop-lab">Dernières opérations</p>
+    <ul class="hist" id="histList"></ul>
+  </div>
+  <div class="pop-sec">
+    <p class="pop-lab">Compte</p>
+    <p class="acct" id="acctLine"></p>
+    <div class="pop-actions">
+      <button class="btn" id="popBoard">Classement</button>
+      <button class="btn" id="popLogout">Déconnexion</button>
+    </div>
+    <button class="btn acct-up" id="popUpgrade" hidden>Créer un compte pour garder mes jetons</button>
+  </div>
+  <div class="switch-row"><span id="sndLab">Effets sonores</span><button class="switch" id="sndSwitch" role="switch" aria-checked="true" aria-labelledby="sndLab"></button></div>
+  <p class="pop-note">Jetons virtuels, gratuits et sans valeur réelle. Jouez pour le plaisir et faites des pauses régulières.</p>
+</div>
+
+<main>
+  <section id="homeView">
+    <p class="brand">Maison d’Or</p>
+    <h1 class="hello" id="hello">Bonsoir</h1>
+    <div class="filters" id="filters" role="group" aria-label="Filtrer les jeux">
+      <button class="chipf" data-f="all" aria-pressed="true">Tous</button>
+      <button class="chipf" data-f="fav" aria-pressed="false">Favoris</button>
+      <button class="chipf" data-f="machines" aria-pressed="false">Machines</button>
+      <button class="chipf" data-f="tables" aria-pressed="false">Tables</button>
+      <button class="chipf" data-f="instant" aria-pressed="false">Instantanés</button>
+    </div>
+    <p class="pin-note" id="pinNote"></p>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="gameView" hidden>
+    <div class="gv-head">
+      <a class="back" href="#/"><svg aria-hidden="true"><use href="#i-back"/></svg>Jeux</a>
+      <h1 class="gv-title" id="gvTitle"></h1>
+      <button class="star" id="gvStar" aria-pressed="false" aria-label="Ajouter aux favoris"><svg aria-hidden="true"><use href="#i-star"/></svg></button>
+    </div>
+    <div id="gameRoot"></div>
+  </section>
+</main>
+
+<dialog id="depDlg" aria-labelledby="depTitle">
+  <form method="dialog" class="sheet">
+    <h2 id="depTitle">Ajouter des jetons</h2>
+    <p>Choisissez un montant. Les jetons sont virtuels et gratuits.</p>
+    <div class="dep-grid" id="depGrid">
+      <button type="button" class="dep-opt" data-amt="500" aria-pressed="false">500<small>jetons</small></button>
+      <button type="button" class="dep-opt" data-amt="1000" aria-pressed="true">1 000<small>jetons</small></button>
+      <button type="button" class="dep-opt" data-amt="2500" aria-pressed="false">2 500<small>jetons</small></button>
+      <button type="button" class="dep-opt" data-amt="10000" aria-pressed="false">10 000<small>jetons</small></button>
+    </div>
+    <div class="row2"><button value="cancel" class="btn">Annuler</button><button type="button" class="btn-primary" id="depGo">Ajouter 1 000 jetons</button></div>
+  </form>
+</dialog>
+
+<dialog id="nameDlg" aria-labelledby="nameTitle">
+  <form method="dialog" class="sheet" id="nameForm">
+    <h2 id="nameTitle">Votre nom de joueur</h2>
+    <p>Il s’affiche en haut de l’écran.</p>
+    <label class="field"><span>Nom</span><input id="nameInput" maxlength="18" autocomplete="nickname"></label>
+    <div class="row2"><button value="cancel" class="btn" formnovalidate>Annuler</button><button type="submit" value="ok" class="btn-primary">Enregistrer</button></div>
+  </form>
+</dialog>
+
+<dialog id="authDlg" aria-labelledby="authTitle">
+  <form class="sheet" id="authForm" novalidate>
+    <p class="brand">Maison d’Or</p>
+    <h2 id="authTitle">Bienvenue</h2>
+    <p id="authSub">Connectez-vous pour retrouver vos jetons, ou créez un compte : 1 000 jetons offerts.</p>
+    <div class="seg auth-tabs" id="authTabs">
+      <button type="button" data-m="login" aria-pressed="true">Connexion</button>
+      <button type="button" data-m="register" aria-pressed="false">Créer un compte</button>
+    </div>
+    <label class="field"><span>Identifiant</span><input id="authUser" name="username" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+    <label class="field" id="authNameField" hidden><span>Nom affiché (facultatif)</span><input id="authName" maxlength="18" autocomplete="nickname"></label>
+    <label class="field"><span>Mot de passe</span><input id="authPass" name="password" type="password" minlength="6" maxlength="200" autocomplete="current-password" required></label>
+    <p class="auth-err" id="authErr" role="alert"></p>
+    <button type="submit" class="btn-primary auth-go" id="authGo">Se connecter</button>
+    <div class="auth-alt" id="authAlt">
+      <button type="button" class="btn" id="authGuest">Jouer en invité</button>
+      <button type="button" class="btn" id="authCancel" hidden>Annuler</button>
+    </div>
+    <p class="pop-note">Jetons virtuels, gratuits et sans valeur réelle. Réservé aux personnes majeures.</p>
+  </form>
+</dialog>
+
+<dialog id="boardDlg" aria-labelledby="boardTitle">
+  <form method="dialog" class="sheet">
+    <h2 id="boardTitle">Classement</h2>
+    <p>Les joueurs les mieux dotés de la Maison.</p>
+    <ol class="board" id="boardList"></ol>
+    <button value="close" class="btn board-close">Fermer</button>
+  </form>
+</dialog>
+
+<div id="toasts" aria-live="polite"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
