@@ -64,30 +64,163 @@ function save() {
 }
 
 /* ================= Son ================= */
-let ac = null;
-function audio() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (ac && ac.state === 'suspended') ac.resume(); }
+// Tout est synthétisé avec Web Audio : aucun fichier à télécharger.
+// Deux bus : les effets (réglage « Effets sonores », enregistré sur le serveur)
+// et la musique (réglage « Musique », mémorisé sur l'appareil).
+let ac = null, bus = null, noiseBuf = null;
+const pref = {
+  get(k, d) { try { const v = localStorage.getItem('maisondor:' + k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('maisondor:' + k, v); } catch (e) {} }
+};
+function audio() {
+  if (!ac) {
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ac.destination);
+    const master = ac.createGain(); master.gain.value = .9; master.connect(comp);
+    const sfxG = ac.createGain(); sfxG.connect(master);
+    const musG = ac.createGain(); musG.gain.value = 0; musG.connect(master);
+    // Réverbération légère, partagée par la musique et les jingles.
+    const rev = ac.createConvolver(), len = ac.sampleRate * 2.2, ir = ac.createBuffer(2, len, ac.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    rev.buffer = ir; const revG = ac.createGain(); revG.gain.value = .32; rev.connect(revG).connect(master);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    bus = { master, sfx: sfxG, music: musG, rev };
+    music.sync();
+  }
+  if (ac.state === 'suspended') ac.resume();
+}
 document.addEventListener('pointerdown', audio, { passive: true });
-function tone(f, t0, d, type = 'sine', v = .08, fEnd) {
-  if (!ac || !S.sound) return;
-  const t = ac.currentTime + t0, o = ac.createOscillator(), g = ac.createGain();
+document.addEventListener('keydown', audio);
+document.addEventListener('visibilitychange', () => { if (!ac) return; document.hidden ? ac.suspend() : ac.resume(); });
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+// Note de synthèse : enveloppe, glissando et envoi facultatif vers la réverbération.
+function tone(f, t0, d, type = 'sine', v = .08, fEnd, { out, at, verb = 0, attack = .004 } = {}) {
+  if (!ac) return;
+  if (!out && !S.sound) return;
+  const t = at !== undefined ? at : ac.currentTime + t0, o = ac.createOscillator(), g = ac.createGain();
   o.type = type; o.frequency.setValueAtTime(f, t); if (fEnd) o.frequency.exponentialRampToValueAtTime(fEnd, t + d);
-  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
-  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d + .03);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + attack); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g).connect(out || bus.sfx); if (verb) { const s = ac.createGain(); s.gain.value = verb; g.connect(s).connect(bus.rev); }
+  o.start(t); o.stop(t + d + .05);
+}
+// Bruit filtré : balais, charleston, souffle, roulement.
+function noise(t0, d, v = .1, { type = 'highpass', freq = 6000, q = .7, out, at, fEnd } = {}) {
+  if (!ac) return;
+  if (!out && !S.sound) return;
+  const t = at !== undefined ? at : ac.currentTime + t0, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  src.buffer = noiseBuf; src.loop = true; f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+  if (fEnd) f.frequency.exponentialRampToValueAtTime(fEnd, t + d);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .005); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  src.connect(f).connect(g).connect(out || bus.sfx); src.start(t, Math.random()); src.stop(t + d + .05);
 }
 const sfx = {
   click() { tone(660, 0, .05, 'triangle', .06); },
   tick() { tone(900, 0, .03, 'square', .018); },
-  stop() { tone(190, 0, .13, 'triangle', .18, 70); },
-  lose() { tone(230, 0, .3, 'sawtooth', .04, 140); },
-  coin() { tone(1318, 0, .08, 'square', .04); tone(1760, .07, .2, 'square', .04); },
-  win(n = 3) { [523, 659, 784, 1047, 1319, 1568].slice(0, n).forEach((f, i) => tone(f, i * .09, .24, 'triangle', .11)); },
-  card() { tone(1500, 0, .05, 'triangle', .05, 500); },
-  star() { tone(880, 0, .08, 'sine', .08, 1320); },
-  boom() { tone(140, 0, .55, 'sawtooth', .16, 35); },
-  gem(i = 0) { const f = 880 * Math.pow(1.06, i); tone(f, 0, .1, 'triangle', .08); tone(f * 1.5, .06, .16, 'triangle', .05); },
-  peg() { tone(rand(1300, 1900), 0, .03, 'sine', .025); },
-  launch() { tone(260, 0, .35, 'sawtooth', .05, 90); }
+  stop() { tone(190, 0, .13, 'triangle', .18, 70); noise(0, .08, .05, { type: 'lowpass', freq: 900 }); },
+  lose() { tone(330, 0, .22, 'triangle', .07, 260); tone(247, .16, .38, 'triangle', .07, 180, { verb: .3 }); },
+  coin() { tone(1318, 0, .08, 'square', .04); tone(1760, .07, .22, 'square', .04, 0, { verb: .25 }); },
+  // Arpège majeur dont la longueur suit l'importance du gain, puis un accord tenu.
+  win(n = 3) {
+    [523, 659, 784, 1047, 1319, 1568].slice(0, n).forEach((f, i) => tone(f, i * .085, .3, 'triangle', .11, 0, { verb: .35 }));
+    const end = n * .085;
+    [523, 659, 784].forEach(f => tone(f * 2, end, .9, 'sine', .05, 0, { verb: .5, attack: .02 }));
+    if (n >= 5) for (let i = 0; i < 10; i++) tone(rand(1800, 3200), end + i * .05, .12, 'sine', .03, 0, { verb: .4 });
+  },
+  // Fanfare des gros gains : cuivres synthétiques + pluie de pièces.
+  fanfare(level = 1) {
+    const seq = [[60, 64, 67], [62, 65, 69], [64, 67, 72], [65, 69, 72, 77]];
+    seq.forEach((ch, i) => ch.forEach(m => tone(mtof(m + 12), i * .16, i === 3 ? 1.6 : .2, 'sawtooth', .035, 0, { verb: .5, attack: .015 })));
+    [48, 55, 60].forEach(m => tone(mtof(m), .48, 1.6, 'triangle', .09, 0, { verb: .4, attack: .02 }));
+    noise(.48, 1.4, .05, { type: 'highpass', freq: 7000 });
+    for (let i = 0; i < 14 * level; i++) tone(rand(1500, 3000), .5 + i * .07, .1, 'square', .018, 0, { verb: .3 });
+  },
+  card() { noise(0, .07, .09, { type: 'bandpass', freq: 3200, q: 1.2 }); tone(1500, 0, .05, 'triangle', .03, 500); },
+  star() { tone(880, 0, .08, 'sine', .08, 1320); tone(1760, .07, .2, 'sine', .04, 0, { verb: .4 }); },
+  boom() { tone(140, 0, .7, 'sawtooth', .16, 30); noise(0, .9, .22, { type: 'lowpass', freq: 2400, fEnd: 120 }); },
+  gem(i = 0) { const f = 880 * Math.pow(1.06, i); tone(f, 0, .12, 'triangle', .08, 0, { verb: .3 }); tone(f * 1.5, .06, .2, 'sine', .05, 0, { verb: .4 }); },
+  peg() { tone(rand(1300, 1900), 0, .04, 'sine', .03); },
+  launch() { tone(260, 0, .5, 'sawtooth', .05, 90); noise(0, 1.1, .08, { type: 'bandpass', freq: 400, fEnd: 2400, q: .8 }); },
+  whoosh() { noise(0, .45, .07, { type: 'bandpass', freq: 500, fEnd: 3000, q: 1.4 }); },
+  roll() { for (let i = 0; i < 6; i++) noise(i * .07, .06, .06, { type: 'bandpass', freq: rand(900, 1600), q: 3 }); }
 };
+
+/* ---------- Musique d'ambiance ---------- */
+// Boucle lounge-jazz générée en direct : nappes, contrebasse, balais et vibraphone.
+// L'ambiance s'adapte : calme à l'accueil, plus présente en jeu, tendue pendant le vol de la fusée.
+const music = (() => {
+  const MOODS = {
+    lobby: { bpm: 88, cutoff: 1300, hats: .55, mel: .22, vol: .5 },
+    game: { bpm: 100, cutoff: 1900, hats: .8, mel: .3, vol: .42 },
+    tense: { bpm: 124, cutoff: 3200, hats: 1, mel: .12, vol: .46 }
+  };
+  // ii-V-I-VI en ré mineur / do majeur, puis variation (accords en notes MIDI, basse à part).
+  const PROG = [
+    { bass: 38, pad: [53, 57, 60, 64] }, { bass: 43, pad: [53, 59, 64, 69] },
+    { bass: 48, pad: [52, 55, 59, 62] }, { bass: 45, pad: [55, 61, 64, 70] },
+    { bass: 41, pad: [57, 60, 64, 67] }, { bass: 40, pad: [55, 59, 62, 65] },
+    { bass: 45, pad: [55, 60, 64, 67] }, { bass: 43, pad: [53, 57, 59, 65] }
+  ];
+  let on = pref.get('music', '1') === '1', mood = 'lobby', timer = 0, step = 0, next = 0, bar = 0;
+  const m = () => MOODS[mood];
+  function pad(ch, t, dur) {
+    const f = ac.createBiquadFilter(), g = ac.createGain();
+    f.type = 'lowpass'; f.frequency.value = m().cutoff; f.Q.value = .4;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.045, t + .5); g.gain.setValueAtTime(.045, t + dur - .4); g.gain.exponentialRampToValueAtTime(.0001, t + dur + .3);
+    f.connect(g); g.connect(bus.music); const s = ac.createGain(); s.gain.value = .5; g.connect(s).connect(bus.rev);
+    for (const n of ch) for (const det of [-6, 6]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(n); o.detune.value = det; o.connect(f); o.start(t); o.stop(t + dur + .4); }
+  }
+  function bass(n, t, len) {
+    const o = ac.createOscillator(), o2 = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'triangle'; o2.type = 'sine'; o.frequency.value = o2.frequency.value = mtof(n);
+    f.type = 'lowpass'; f.frequency.value = 700;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.2, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + len);
+    o.connect(f); o2.connect(f); f.connect(g).connect(bus.music); o.start(t); o2.start(t); o.stop(t + len + .05); o2.stop(t + len + .05);
+  }
+  function vibe(n, t) {
+    tone(mtof(n), 0, 1.1, 'sine', .05, 0, { out: bus.music, at: t, verb: .6, attack: .005 });
+    tone(mtof(n) * 4, 0, .25, 'sine', .012, 0, { out: bus.music, at: t });
+  }
+  function tick() {
+    const spb = 60 / m().bpm / 4; // durée d'une double croche
+    while (next < ac.currentTime + .25) {
+      const t = next, s = step % 16, ch = PROG[bar % PROG.length], nx = PROG[(bar + 1) % PROG.length];
+      const swing = s % 2 ? spb * .28 : 0, tt = t + swing;
+      if (s === 0) pad(ch.pad, t, spb * 16);
+      // Contrebasse « walking » : fondamentale, quinte, octave, puis approche chromatique.
+      if (s % 4 === 0) { const walk = [ch.bass, ch.bass + 7, ch.bass + 12, nx.bass + (Math.random() < .5 ? 1 : -1)]; bass(walk[s / 4], t, spb * 3.6); }
+      if (mood === 'tense' && s % 2 === 1) bass(ch.bass + 12, tt, spb * .9);
+      // Batterie aux balais.
+      if (s === 0 || s === 8) { tone(110, 0, .25, 'sine', mood === 'lobby' ? .12 : .2, 45, { out: bus.music, at: t }); }
+      if (s === 4 || s === 12) noise(0, .22, .05, { type: 'bandpass', freq: 2200, q: .6, out: bus.music, at: t });
+      if (s % 2 === 0 || (mood === 'tense')) if (Math.random() < m().hats) noise(0, .05, s % 4 === 2 ? .045 : .025, { freq: 8000, out: bus.music, at: tt });
+      // Vibraphone : notes de l'accord, parfois à l'octave.
+      if (s % 2 === 0 && Math.random() < m().mel) vibe(ch.pad[Math.floor(Math.random() * 4)] + (Math.random() < .5 ? 12 : 24), tt);
+      next += spb; step++; if (step % 16 === 0) bar++;
+    }
+  }
+  function start() {
+    if (timer || !ac || !on) return;
+    next = ac.currentTime + .1; step = 0;
+    bus.music.gain.cancelScheduledValues(ac.currentTime); bus.music.gain.setTargetAtTime(m().vol, ac.currentTime, .8);
+    timer = setInterval(tick, 60); tick();
+  }
+  function stop() {
+    if (!timer) return; clearInterval(timer); timer = 0;
+    if (bus) { bus.music.gain.cancelScheduledValues(ac.currentTime); bus.music.gain.setTargetAtTime(0, ac.currentTime, .3); }
+  }
+  return {
+    get on() { return on; },
+    sync() { if (!ac) return; on ? start() : stop(); },
+    toggle() { on = !on; pref.set('music', on ? '1' : '0'); audio(); this.sync(); },
+    mood(x) { if (!MOODS[x] || mood === x) return; mood = x; if (timer && bus) bus.music.gain.setTargetAtTime(m().vol, ac.currentTime, .6); },
+    // Baisse la musique le temps d'un jingle.
+    duck(sec = 2.5) {
+      if (!timer || !bus) return; const g = bus.music.gain, t = ac.currentTime;
+      g.cancelScheduledValues(t); g.setTargetAtTime(m().vol * .25, t, .08); g.setTargetAtTime(m().vol, t + sec, .6);
+    }
+  };
+})();
 
 /* ================= Toasts, pièces, célébrations ================= */
 function toast(text, type = 'info') {
@@ -95,17 +228,33 @@ function toast(text, type = 'info') {
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 2400);
 }
 const fx = $('#fx'), fctx = fx.getContext('2d'); let parts = [], fraf = 0;
-function fitFx() { const d = devicePixelRatio || 1; fx.width = innerWidth * d; fx.height = innerHeight * d; fctx.setTransform(d, 0, 0, d, 0, 0); }
+function fitFx() { const d = Math.min(devicePixelRatio || 1, 2); fx.width = innerWidth * d; fx.height = innerHeight * d; fctx.setTransform(d, 0, 0, d, 0, 0); }
 addEventListener('resize', fitFx); fitFx();
-function burst(x, y, n) {
+const CONFETTI = ['#f6dd93', '#d12c45', '#3ecf8e', '#4fb3ff', '#ff6fae', '#ffffff'];
+// Pièces d'or et, pour les beaux gains, confettis colorés et étincelles.
+function burst(x, y, n, { confetti = 0, rain = false } = {}) {
   if (reduce) return;
-  for (let i = 0; i < n; i++) parts.push({ x: x + rand(-40, 40), y, vx: rand(-4.5, 4.5), vy: rand(-14, -5), r: rand(6, 10), rot: rand(0, 6.28), vr: rand(-.3, .3) });
+  for (let i = 0; i < n; i++) parts.push(rain
+    ? { k: 'coin', x: rand(0, innerWidth), y: rand(-200, -20), vx: rand(-1, 1), vy: rand(2, 7), r: rand(7, 12), rot: rand(0, 6.28), vr: rand(-.3, .3) }
+    : { k: 'coin', x: x + rand(-40, 40), y, vx: rand(-4.5, 4.5), vy: rand(-14, -5), r: rand(6, 10), rot: rand(0, 6.28), vr: rand(-.3, .3) });
+  for (let i = 0; i < confetti; i++) parts.push({ k: 'conf', x: x + rand(-30, 30), y, vx: rand(-7, 7), vy: rand(-16, -6), w: rand(5, 9), hgt: rand(9, 15), rot: rand(0, 6.28), vr: rand(-.25, .25), c: CONFETTI[i % CONFETTI.length], drag: rand(.96, .99) });
+  for (let i = 0; i < confetti / 2; i++) { const a = rand(0, 6.28), v = rand(3, 9); parts.push({ k: 'spark', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 }); }
   if (!fraf) fraf = requestAnimationFrame(fxLoop);
 }
 function fxLoop() {
   fctx.clearRect(0, 0, innerWidth, innerHeight);
-  parts = parts.filter(p => p.y < innerHeight + 30);
+  parts = parts.filter(p => p.y < innerHeight + 30 && (p.k !== 'spark' || p.life > 0));
   for (const p of parts) {
+    if (p.k === 'spark') {
+      p.x += p.vx; p.y += p.vy; p.vx *= .92; p.vy *= .92; p.life -= .03;
+      fctx.globalAlpha = Math.max(0, p.life); fctx.fillStyle = '#fff6cf';
+      fctx.beginPath(); fctx.arc(p.x, p.y, 2.2, 0, 6.283); fctx.fill(); fctx.globalAlpha = 1; continue;
+    }
+    if (p.k === 'conf') {
+      p.vy += .3; p.vx *= p.drag; p.x += p.vx + Math.sin(p.rot * 2); p.y += p.vy; p.rot += p.vr;
+      fctx.save(); fctx.translate(p.x, p.y); fctx.rotate(p.rot); fctx.scale(1, Math.cos(p.rot * 3));
+      fctx.fillStyle = p.c; fctx.fillRect(-p.w / 2, -p.hgt / 2, p.w, p.hgt); fctx.restore(); continue;
+    }
     p.vy += .38; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
     fctx.save(); fctx.translate(p.x, p.y); fctx.scale(Math.abs(Math.cos(p.rot)) * .9 + .1, 1);
     fctx.beginPath(); fctx.arc(0, 0, p.r, 0, 6.283); fctx.fillStyle = '#e7bf5a'; fctx.fill();
@@ -115,12 +264,47 @@ function fxLoop() {
   fraf = parts.length ? requestAnimationFrame(fxLoop) : 0;
   if (!fraf) fctx.clearRect(0, 0, innerWidth, innerHeight);
 }
-function celebrate(el, mult) {
-  const r = el.getBoundingClientRect();
-  burst(r.left + r.width / 2, r.top + r.height / 2, Math.min(90, Math.round(8 + mult * 4)));
-  sfx.win(mult >= 10 ? 6 : mult >= 3 ? 5 : 3);
-  if (mult >= 10) { toast(`Gros gain ! ${fmtX(mult)}`, 'win'); if (navigator.vibrate) navigator.vibrate([50, 30, 90]); }
+// Montant qui s'envole au-dessus de l'élément gagnant.
+function floatText(el, text, cls = 'good') {
+  if (reduce || !el) return;
+  const r = el.getBoundingClientRect(), t = h(`<div class="float-txt ${cls}"></div>`);
+  t.textContent = text; t.style.left = r.left + r.width / 2 + 'px'; t.style.top = r.top + r.height * .4 + 'px';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 1500);
 }
+// Éclair doré (gain) ou rouge (perte) sur la scène du jeu.
+function flash(el, kind) {
+  const st = el && el.closest('.g-stage'); if (!st) return;
+  st.classList.remove('flash-win', 'flash-lose'); void st.offsetWidth; st.classList.add('flash-' + kind);
+}
+function celebrate(el, mult, amount) {
+  const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  burst(cx, cy, Math.min(90, Math.round(8 + mult * 4)), { confetti: mult >= 2 ? Math.min(120, Math.round(mult * 12)) : 0 });
+  flash(el, 'win');
+  if (amount > 0) floatText(el, '+' + money(amount));
+  if (mult >= 5) bigWin(mult, amount, cx, cy);
+  else sfx.win(mult >= 3 ? 5 : 3);
+  if (mult >= 10 && navigator.vibrate) navigator.vibrate([50, 30, 90]);
+}
+function defeat(el, hard = false) {
+  flash(el, 'lose');
+  if (hard) { const st = el && el.closest('.g-stage'); if (st) { st.classList.remove('shake'); void st.offsetWidth; st.classList.add('shake'); } }
+  else sfx.lose();
+}
+// Écran plein « Gros gain / Énorme gain / Jackpot » avec rayons, compteur et pluie de pièces.
+const bw = $('#bigwin'); let bwT = 0;
+function bigWin(mult, amount, cx, cy) {
+  const level = mult >= 50 ? 3 : mult >= 15 ? 2 : 1;
+  $('#bwKicker').textContent = ['Gros gain !', 'Énorme gain !', 'Jackpot !'][level - 1];
+  $('#bwMult').textContent = fmtX(mult);
+  bw.className = 'bigwin lvl' + level; bw.hidden = false;
+  countTo($('#bwAmount'), 0, amount || 0, 1400 + level * 400, money);
+  sfx.fanfare(level); music.duck(3 + level);
+  burst(cx, cy, 30, { confetti: 80 * level });
+  setTimeout(() => burst(0, 0, 40 * level, { rain: true }), 250);
+  clearTimeout(bwT); bwT = setTimeout(closeBigWin, 2600 + level * 900);
+}
+function closeBigWin() { clearTimeout(bwT); if (bw.hidden) return; bw.classList.add('out'); setTimeout(() => { bw.hidden = true; bw.classList.remove('out'); }, 300); }
+bw.addEventListener('click', closeBigWin);
 function flyCoins(fromEl, toEl, n = 10) {
   if (reduce) return;
   const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
@@ -135,6 +319,50 @@ function flyCoins(fromEl, toEl, n = 10) {
     ], { duration: 700, delay: i * 45, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'both' }).finished.then(() => c.remove());
   }
 }
+
+/* ---------- Fond animé ---------- */
+// Poussière d'or qui flotte et scintille derrière l'interface (léger : ~30 images/s, peu de particules).
+(function ambient() {
+  const cv = $('#amb'), ctx = cv.getContext('2d'); let W = 0, H = 0, dots = [], last = 0;
+  function fit() {
+    const d = Math.min(devicePixelRatio || 1, 1.5); W = innerWidth; H = innerHeight;
+    cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0);
+    const n = Math.round(Math.min(46, W * H / 22000));
+    dots = Array.from({ length: n }, () => ({ x: rand(0, W), y: rand(0, H), r: rand(.6, 2.2), v: rand(.08, .35), ph: rand(0, 6.28), sw: rand(.2, .8) }));
+    if (reduce) draw(0);
+  }
+  function draw(now) {
+    ctx.clearRect(0, 0, W, H);
+    const rgb = document.documentElement.dataset.theme === 'light' ? '176,128,30' : '246,221,147';
+    for (const p of dots) {
+      if (!reduce) { p.y -= p.v; p.x += Math.sin(now / 2400 + p.ph) * p.sw * .3; if (p.y < -6) { p.y = H + 6; p.x = rand(0, W); } }
+      const a = .25 + .55 * (.5 + .5 * Math.sin(now / 700 + p.ph * 3));
+      ctx.fillStyle = `rgba(${rgb},${(a * .7).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+      if (p.r > 1.8 && a > .7) { ctx.fillStyle = `rgba(${rgb},${((a - .7) * .5).toFixed(3)})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 3.5, 0, 6.283); ctx.fill(); }
+    }
+  }
+  function loop(now) { if (!document.hidden && now - last > 33) { last = now; draw(now); } requestAnimationFrame(loop); }
+  addEventListener('resize', fit); fit();
+  if (!reduce) requestAnimationFrame(loop);
+})();
+
+/* ---------- Thème ---------- */
+const themeBtn = $('#themeBtn');
+function applyTheme(t) {
+  const light = t === 'light'; document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  $('meta[name="theme-color"]').content = light ? '#e9efe9' : '#050e0f';
+  $('use', themeBtn).setAttribute('href', light ? '#i-moon' : '#i-sun');
+  themeBtn.setAttribute('aria-label', light ? 'Passer au thème sombre' : 'Passer au thème clair');
+  $('#thmSwitch').setAttribute('aria-checked', String(!light));
+}
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  pref.set('theme', t); applyTheme(t); sfx.star();
+}
+themeBtn.addEventListener('click', toggleTheme);
+$('#thmSwitch').addEventListener('click', toggleTheme);
+applyTheme(pref.get('theme', 'dark'));
 
 /* ================= Portefeuille ================= */
 const balBtn = $('#balBtn'), balTxt = $('#balTxt'), pop = $('#balPop');
@@ -200,6 +428,7 @@ function renderPop() {
     ul.appendChild(li);
   });
   $('#sndSwitch').setAttribute('aria-checked', String(S.sound));
+  $('#musSwitch').setAttribute('aria-checked', String(music.on));
   $('#acctLine').textContent = S.guest ? 'Partie invitée : vos jetons restent sur cet appareil.' : `Connecté en tant que ${S.username}.`;
   $('#popUpgrade').hidden = !S.guest;
 }
@@ -212,6 +441,7 @@ balBtn.addEventListener('click', () => pop.hidden ? openPop() : closePop());
 document.addEventListener('pointerdown', e => { if (!pop.hidden && !pop.contains(e.target) && !balBtn.contains(e.target)) closePop(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) { closePop(); balBtn.focus(); } });
 $('#sndSwitch').addEventListener('click', () => { S.sound = !S.sound; save(); audio(); renderPop(); sfx.click(); });
+$('#musSwitch').addEventListener('click', () => { music.toggle(); renderPop(); sfx.click(); });
 let armed = false, armT;
 function resetArm(on) { armed = on; clearTimeout(armT); $('#popReset').textContent = on ? 'Confirmer' : 'Réinitialiser'; if (on) armT = setTimeout(() => resetArm(false), 3000); }
 $('#popReset').addEventListener('click', async () => {
@@ -370,7 +600,7 @@ function gSlots(root) {
     if (!r) return unlock();
     W.hold(r); if (!alive) return W.done('slots', r);
     $$('.sl-cell.win', root).forEach(c => c.classList.remove('win')); win.classList.remove('hit');
-    msg.textContent = 'Les rouleaux tournent…';
+    msg.textContent = 'Les rouleaux tournent…'; win.classList.add('spinning'); sfx.whoosh();
     const fin = r.reels, res = { m: r.mult, idx: r.idx }; pending = r;
     const H = $('.sl-cell', root).getBoundingClientRect().height, tk = setInterval(sfx.tick, 85);
     await Promise.all(reels.map(async (reel, i) => {
@@ -385,12 +615,12 @@ function gSlots(root) {
       await a.finished; if (!alive) return; set(i, fin[i]); a.cancel(); sfx.stop();
     }));
     clearInterval(tk); if (!alive) return;
-    cur = fin; pending = null;
+    win.classList.remove('spinning'); cur = fin; pending = null;
     W.done('slots', r);
     if (res.m) {
       res.idx.forEach(i => $$('.sl-cell', reels[i])[1].classList.add('win')); win.classList.add('hit');
-      msg.textContent = `Gain : +${money(r.payout)} jetons`; celebrate(win, res.m);
-    } else { msg.textContent = ['Pas de gain. Un autre tour ?', 'Le prochain sera le bon.', 'Raté de peu.'][Math.floor(Math.random() * 3)]; sfx.lose(); }
+      msg.textContent = `Gain : +${money(r.payout)} jetons`; celebrate(win, res.m, r.payout);
+    } else { msg.textContent = ['Pas de gain. Un autre tour ?', 'Le prochain sera le bon.', 'Raté de peu.'][Math.floor(Math.random() * 3)]; defeat(win); }
     unlock();
   }
   go.onclick = spin;
@@ -465,7 +695,7 @@ function gRoulette(root) {
     const r = await play('/games/roulette/spin', { bets });
     if (!r) return unlock();
     W.hold(r); if (!alive) return W.done('roulette', r);
-    msg.textContent = 'Les jeux sont faits, rien ne va plus…';
+    msg.textContent = 'Les jeux sont faits, rien ne va plus…'; cv.parentElement.classList.add('spinning'); sfx.whoosh();
     const n = r.n, payout = r.payout;
     pending = r;
     const seg = 360 / 37, k = ORDER.indexOf(n), target = ((-k * seg) % 360 + 360) % 360, curMod = ((rot % 360) + 360) % 360;
@@ -477,13 +707,13 @@ function gRoulette(root) {
     ball.animate([{ transform: 'translateY(-250%)' }, { transform: 'translateY(-250%)', offset: .55 }, { transform: 'translateY(30%)', offset: .85 }, { transform: 'translateY(0)' }], { duration: dur, fill: 'forwards' });
     let gap = 60; const tick = async () => { while (busy && alive && gap < 420) { sfx.tick(); await sleep(gap); gap *= 1.07; } }; tick();
     await sleep(dur); if (!alive) return;
-    busy = false; pending = null;
+    busy = false; pending = null; cv.parentElement.classList.remove('spinning'); sfx.roll();
     W.done('roulette', r); const net = r.net;
     $(`[data-b="n:${n}"]`, board).classList.add('hit');
     addHist(n);
     const label = n === 0 ? 'Zéro' : `${n} ${RED.has(n) ? 'rouge' : 'noir'}`;
-    if (payout > 0) { msg.textContent = `${label} : vous gagnez ${money(payout)} (${net >= 0 ? '+' : ''}${money(net)})`; if (net > 0) celebrate(cv, payout / t); else sfx.coin(); }
-    else { msg.textContent = `${label}. Pas de gain cette fois.`; sfx.lose(); }
+    if (payout > 0) { msg.textContent = `${label} : vous gagnez ${money(payout)} (${net >= 0 ? '+' : ''}${money(net)})`; if (net > 0) celebrate(cv, payout / t, payout); else sfx.coin(); }
+    else { msg.textContent = `${label}. Pas de gain cette fois.`; defeat(cv); }
     go.disabled = false; $$('button', board).forEach(b => b.disabled = false);
   }
   go.onclick = spin;
@@ -564,7 +794,7 @@ function gBJ(root) {
     if (!alive) return;
     pendingEnd = null; W.done('bj', r);
     msg.textContent = { win: `Gagné ! +${money(r.net)}`, bj: `Blackjack ! +${money(r.net)}`, push: 'Égalité, mise rendue.', lose: 'La banque gagne.', bust: 'Plus de 21, perdu.' }[r.outcome];
-    if (r.payout > r.stake) celebrate(stage, r.payout / r.stake); else if (r.outcome !== 'push') sfx.lose();
+    if (r.payout > r.stake) celebrate(stage, r.payout / r.stake, r.payout); else if (r.outcome !== 'push') defeat(stage);
     stake = 0; phase = 'bet'; ui();
   }
   dealB.onclick = deal; hitB.onclick = () => act('/games/bj/hit'); standB.onclick = () => act('/games/bj/stand');
@@ -629,7 +859,7 @@ function gMines(root) {
   function revealAll(set) { tiles.forEach((t, i) => { if (!t.classList.contains('open')) { t.innerHTML = set.has(i) ? bombSvg : gemSvg; t.classList.add('open', 'dim'); } t.disabled = true; }); }
   function finishCash(r) {
     active = false; W.settle('mines', r);
-    revealAll(new Set(r.minePositions)); msg.textContent = `Encaissé à ${fmtX(r.mult)} : +${money(r.net)}`; celebrate(grid, r.mult); ui();
+    revealAll(new Set(r.minePositions)); msg.textContent = `Encaissé à ${fmtX(r.mult)} : +${money(r.net)}`; celebrate(grid, r.mult, r.payout); ui();
   }
   async function cashout() {
     if (!active || !opened || busy) return;
@@ -647,7 +877,7 @@ function gMines(root) {
     if (!r) return ui();
     if (!alive) { if (!r.active) W.settle('mines', r); return; }
     if (r.boom) {
-      active = false; t.innerHTML = bombSvg; t.classList.add('open', 'boom'); sfx.boom();
+      active = false; t.innerHTML = bombSvg; t.classList.add('open', 'boom'); sfx.boom(); defeat(grid, true);
       if (navigator.vibrate) navigator.vibrate(120);
       grid.classList.remove('shake'); void grid.offsetWidth; grid.classList.add('shake');
       W.settle('mines', r); const set = new Set(r.minePositions); setTimeout(() => alive && revealAll(set), reduce ? 0 : 350);
@@ -686,7 +916,7 @@ function gCrash(root) {
       <button class="btn-primary go">Lancer la fusée</button>
     </div></div>`;
   const bet = betBox($('.bb', root), 'crash', 10);
-  const cv = $('.cr-canvas', root), ctx = cv.getContext('2d'), multEl = $('.cr-mult', root), msg = $('.g-msg', root), go = $('.go', root), autoInp = $('.auto', root), histEl = $('.cr-hist', root);
+  const stageEl = $('.g-stage', root), cv = $('.cr-canvas', root), ctx = cv.getContext('2d'), multEl = $('.cr-mult', root), msg = $('.g-msg', root), go = $('.go', root), autoInp = $('.auto', root), histEl = $('.cr-hist', root);
   const K = .00018, mAt = t => Math.exp(K * t);
   let phase = 'idle', t0 = 0, crashAt = 0, stake = 0, cashed = 0, cashing = false, autoAt = 0, cur = 1, raf = 0, alive = true, lastT = 0, round = 0, result = null;
   function fit() { const d = devicePixelRatio || 1, w = cv.clientWidth, hh = cv.clientHeight; if (cv.width !== Math.round(w * d) || cv.height !== Math.round(hh * d)) { cv.width = Math.round(w * d); cv.height = Math.round(hh * d); ctx.setTransform(d, 0, 0, d, 0, 0); } return [w, hh]; }
@@ -724,7 +954,7 @@ function gCrash(root) {
   function learn(r) {
     if (result || !r || !alive) return;
     result = r; crashAt = r.crashAt; W.settle('crash', r);
-    if (r.cashedAt > 0 && !cashed) { cashed = r.cashedAt; multEl.classList.add('cashed'); msg.textContent = `Encaissé à ${fmtX(cashed)} : +${money(r.net)}`; celebrate(cv, cashed); ui(); }
+    if (r.cashedAt > 0 && !cashed) { cashed = r.cashedAt; multEl.classList.add('cashed'); msg.textContent = `Encaissé à ${fmtX(cashed)} : +${money(r.net)}`; celebrate(cv, cashed, r.payout); ui(); }
   }
   function waitEnd(id) {
     (async () => {
@@ -737,6 +967,7 @@ function gCrash(root) {
   function fly(id, elapsed = 0) {
     round = id; cashed = 0; cashing = false; crashAt = 0; result = null; cur = 1;
     phase = 'run'; t0 = performance.now() - elapsed; multEl.className = 'cr-mult'; ui();
+    stageEl.classList.add('flying'); music.mood('tense');
     raf = requestAnimationFrame(loop); waitEnd(id);
   }
   async function launch() {
@@ -768,7 +999,8 @@ function gCrash(root) {
   }
   function crash() {
     phase = 'done'; cancelAnimationFrame(raf); frame(lastT, crashAt, true); multEl.textContent = fmtX(crashAt);
-    if (!cashed) { multEl.classList.add('crashed'); msg.textContent = `La fusée a explosé à ${fmtX(crashAt)}.`; sfx.boom(); }
+    stageEl.classList.remove('flying'); music.mood('game');
+    if (!cashed) { multEl.classList.add('crashed'); msg.textContent = `La fusée a explosé à ${fmtX(crashAt)}.`; sfx.boom(); defeat(cv, true); }
     else msg.textContent += ` La fusée a explosé à ${fmtX(crashAt)}.`;
     addHist(crashAt); ui();
   }
@@ -783,7 +1015,7 @@ function gCrash(root) {
     msg.textContent = 'Vol en cours repris.'; fly(r.round, r.elapsed);
   }).catch(() => {});
   return () => {
-    alive = false; cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener('keydown', key);
+    alive = false; cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener('keydown', key); music.mood('lobby');
     if (phase === 'run' && !cashed && !result) {
       api('/games/crash/cashout', { round }, { keepalive: true }).then(r => {
         W.settle('crash', r);
@@ -827,14 +1059,14 @@ function gDice(root) {
     W.hold(out); if (!alive) return W.done('dice', out);
     const r = out.roll, win = out.win, m = out.mult;
     pending = out;
-    res.className = 'dc-result'; marker.className = 'dc-marker show';
+    res.className = 'dc-result rolling'; marker.className = 'dc-marker show'; sfx.roll();
     const t0 = performance.now(), dur = reduce ? 50 : 600;
     while (performance.now() - t0 < dur) { const v = Math.random() * 100; res.textContent = num(v); marker.style.left = v + '%'; sfx.tick(); await sleep(55); if (!alive) return; }
     res.textContent = num(r); marker.style.left = r + '%'; $('span', marker).textContent = num(r);
-    res.classList.add(win ? 'win' : 'lose'); marker.classList.add(win ? 'win' : 'lose');
+    res.classList.remove('rolling'); res.classList.add(win ? 'win' : 'lose'); marker.classList.add(win ? 'win' : 'lose');
     pending = null; W.done('dice', out);
-    if (win) { msg.textContent = `${num(r)} : gagné, +${money(out.net)}`; celebrate(res, m); }
-    else { msg.textContent = `${num(r)} : perdu. Visez ${mode === 'over' ? 'au-dessus de' : 'en dessous de'} ${x}.`; sfx.lose(); }
+    if (win) { msg.textContent = `${num(r)} : gagné, +${money(out.net)}`; celebrate(res, m, out.payout); }
+    else { msg.textContent = `${num(r)} : perdu. Visez ${mode === 'over' ? 'au-dessus de' : 'en dessous de'} ${x}.`; defeat(res); }
     unlock();
   }
   go.onclick = roll; upd();
@@ -879,8 +1111,8 @@ function gCoin(root) {
     await sleep(reduce ? 50 : 1650); if (!alive) return;
     pending = null; W.done('coin', out);
     addHist(r);
-    if (win) { streak++; msg.textContent = `${r ? 'Face' : 'Pile'} ! Gagné, +${money(out.net)}${streak > 1 ? ` (série de ${streak})` : ''}`; celebrate(coin, M); }
-    else { streak = 0; msg.textContent = `${r ? 'Face' : 'Pile'}. Perdu cette fois.`; sfx.lose(); }
+    if (win) { streak++; msg.textContent = `${r ? 'Face' : 'Pile'} ! Gagné, +${money(out.net)}${streak > 1 ? ` (série de ${streak})` : ''}`; celebrate(coin, M, out.payout); }
+    else { streak = 0; msg.textContent = `${r ? 'Face' : 'Pile'}. Perdu cette fois.`; defeat(coin); }
     upd(); unlock();
   }
   go.onclick = flip; upd();
@@ -937,7 +1169,7 @@ function gPlinko(root) {
     flash[b.k] = performance.now();
     W.done('plinko', b.res); const net = b.res.net, m = b.res.mult;
     msg.textContent = `${fmtX(m)} : ${net >= 0 ? '+' : ''}${money(net)}`;
-    if (m >= 3) celebrate(cv, m); else if (m >= 1) sfx.coin(); else sfx.stop();
+    if (m >= 3) celebrate(cv, m, b.res.payout); else if (m >= 1) { sfx.coin(); floatText(cv, '+' + money(b.res.payout)); } else { sfx.stop(); floatText(cv, '−' + money(-net), 'bad'); }
     if (!balls.some(x => !x.done) && !inflight) $$('button', seg).forEach(x => x.disabled = false);
   }
   function loop(now) { if (!alive) return; draw(now); raf = (balls.length || flash.some(f => now - f < 400)) ? requestAnimationFrame(loop) : 0; }
@@ -1036,16 +1268,17 @@ function syncGvStar() { if (!curGame) return; const f = isFav(curGame.id); gvSta
 gvStar.addEventListener('click', () => curGame && toggleFav(curGame.id, gvStar));
 function route() {
   if (unmount) { unmount(); unmount = null; }
-  closePop();
+  closePop(); closeBigWin();
   const m = location.hash.match(/^#\/jeu\/(\w+)/), g = authed && m && GAMES.find(x => x.id === m[1]);
   const home = $('#homeView'), gv = $('#gameView');
   if (g) {
     curGame = g; home.hidden = true; gv.hidden = false; $('#gvTitle').textContent = g.name; syncGvStar();
     document.title = `${g.name}, Maison d’Or`; gv.classList.remove('view-enter'); void gv.offsetWidth; gv.classList.add('view-enter');
-    const rootEl = $('#gameRoot'); rootEl.innerHTML = ''; unmount = g.mount(rootEl) || null;
+    const rootEl = $('#gameRoot'); rootEl.innerHTML = ''; unmount = g.mount(rootEl) || null; music.mood('game');
   } else {
     curGame = null; gv.hidden = true; home.hidden = false; $('#gameRoot').innerHTML = ''; document.title = 'Maison d’Or';
-    home.classList.remove('view-enter'); void home.offsetWidth; home.classList.add('view-enter'); renderGrid(false);
+    home.classList.remove('view-enter'); void home.offsetWidth; home.classList.add('view-enter'); renderGrid(false); music.mood('lobby');
+    if (!reduce) { grid.classList.add('deal'); setTimeout(() => grid.classList.remove('deal'), 1200); }
   }
   scrollTo(0, 0);
 }

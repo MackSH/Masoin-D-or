@@ -4,9 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Maison d’Or</title>
+<meta name="theme-color" content="#050e0f">
+<script>
+  // Thème choisi (sombre par défaut), appliqué avant l'affichage pour éviter un flash.
+  try { if (localStorage.getItem('maisondor:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}
+</script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<canvas id="amb" aria-hidden="true"></canvas>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <defs>
@@ -70,6 +76,8 @@
     </symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.7 6.3.9-4.55 4.43 1.07 6.27L12 17.1l-5.62 2.95 1.07-6.27L2.9 9.4l6.3-.9z"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z" fill="currentColor"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.6" fill="currentColor"/><path d="M12 1.8v2.6M12 19.6v2.6M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M1.8 12h2.6M19.6 12h2.6M4.8 19.2l1.8-1.8M17.4 6.6l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
   </defs>
 </svg>
@@ -80,6 +88,7 @@
       <span class="avatar" id="avatar">J</span>
       <span class="pinfo"><span class="pname" id="pname">Joueur</span><span class="plevel" id="plevel">Niveau 1</span></span>
     </button>
+    <button class="iconbtn" id="themeBtn" aria-label="Passer au thème clair"><svg aria-hidden="true"><use href="#i-sun"/></svg></button>
     <button class="balance" id="balBtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Voir le solde">
       <svg aria-hidden="true"><use href="#i-coin"/></svg><span id="balTxt">0,00</span>
     </button>
@@ -113,7 +122,9 @@
     </div>
     <button class="btn acct-up" id="popUpgrade" hidden>Créer un compte pour garder mes jetons</button>
   </div>
+  <div class="switch-row"><span id="musLab">Musique d’ambiance</span><button class="switch" id="musSwitch" role="switch" aria-checked="true" aria-labelledby="musLab"></button></div>
   <div class="switch-row"><span id="sndLab">Effets sonores</span><button class="switch" id="sndSwitch" role="switch" aria-checked="true" aria-labelledby="sndLab"></button></div>
+  <div class="switch-row"><span id="thmLab">Thème sombre</span><button class="switch" id="thmSwitch" role="switch" aria-checked="true" aria-labelledby="thmLab"></button></div>
   <p class="pop-note">Jetons virtuels, gratuits et sans valeur réelle. Jouez pour le plaisir et faites des pauses régulières.</p>
 </div>
 
@@ -195,6 +206,16 @@
     <button value="close" class="btn board-close">Fermer</button>
   </form>
 </dialog>
+
+<div class="bigwin" id="bigwin" role="status" hidden>
+  <div class="bw-rays" aria-hidden="true"></div>
+  <div class="bw-card">
+    <p class="bw-kicker" id="bwKicker">Gros gain</p>
+    <p class="bw-amount"><svg aria-hidden="true"><use href="#i-coin"/></svg><span id="bwAmount">0,00</span></p>
+    <p class="bw-mult" id="bwMult">×5</p>
+    <p class="bw-tap">Touchez pour continuer</p>
+  </div>
+</div>
 
 <div id="toasts" aria-live="polite"></div>
 <canvas id="fx" aria-hidden="true"></canvas>
