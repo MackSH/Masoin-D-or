@@ -186,6 +186,7 @@ main{max-width:1100px; margin:0 auto; padding:18px 16px 70px}
 .betbox label{display:block; font-size:13px; color:var(--muted)}
 .bet-row{display:flex; gap:6px; margin-top:6px}
 .bet-row input, .field input{flex:1; min-width:0; height:46px; border-radius:12px; border:1px solid var(--line); background:var(--surface-2); color:var(--text); font:700 17px var(--sans); padding:0 12px; font-variant-numeric:tabular-nums}
+.field input{flex:none}
 .bet-row button{width:46px; height:46px; flex:none; border-radius:12px; border:1px solid var(--line); background:var(--surface-2); font-weight:700; font-size:14px}
 .bet-row button:disabled, .bet-row input:disabled{opacity:.5}
 .field{display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--muted)}
