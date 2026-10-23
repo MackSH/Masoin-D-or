@@ -191,10 +191,15 @@ test('blackjack : la main se termine et paie correctement', async () => {
 test('fusée : encaissement manuel, auto et explosion', async () => {
   const c = client();
   await c('/auth/guest', {});
-  const l = await c('/games/crash/launch', { bet: 10 });
+  let l = await c('/games/crash/launch', { bet: 10 });
   assert.equal(l.status, 200);
   assert.equal(l.body.crashAt, undefined, 'le point d’explosion ne doit pas fuiter');
-  assert.equal((await c('/games/crash/launch', { bet: 10 })).status, 400);
+  // Une deuxième fusée est refusée tant que la première vole, sauf si celle-ci a explosé au départ (×1,00).
+  const second = await c('/games/crash/launch', { bet: 10 });
+  if (second.status === 200) {
+    assert.equal((await c(`/games/crash/wait?round=${l.body.round}`)).body.crashAt, 1);
+    l = second;
+  } else assert.equal(second.status, 400);
   const out = (await c('/games/crash/cashout', {})).body;
   if (out.cashedAt > 0) { assert.ok(out.cashedAt < out.crashAt); approx(out.payout, Math.round(10 * out.cashedAt * 100) / 100); }
   else assert.equal(out.payout, 0);
