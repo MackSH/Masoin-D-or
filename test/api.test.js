@@ -3,7 +3,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { open } = require('../server/db');
 const { createApp } = require('../server/app');
-const { minesMult, bjTotal } = require('../server/casino');
+const { minesMult, bjTotal, KENO_PAY } = require('../server/casino');
 
 // Par défaut, les tests démarrent le serveur Node + SQLite en mémoire.
 // Avec API_URL (et API_REGION), ils visent une API déjà déployée, par exemple la fonction Edge Supabase.
@@ -218,6 +218,27 @@ test('fusée : encaissement manuel, auto et explosion', async () => {
   assert.equal((await c('/games/crash/state')).body.active, false);
   const hist = (await c('/games/crash/history')).body.items;
   assert.equal(hist[0].crashAt, w2.crashAt);
+});
+
+test('keno : tirage, bons numéros et gains', async () => {
+  const c = client();
+  await c('/auth/guest', {});
+  for (const bad of [[], [0], [41], [1, 1], [1.5], Array.from({ length: 11 }, (_, i) => i + 1), 'x']) {
+    assert.equal((await c('/games/keno/play', { bet: 1, picks: bad })).status, 400, JSON.stringify(bad));
+  }
+  let bal = 1000;
+  for (let n = 1; n <= 10; n++) {
+    const picks = Array.from({ length: n }, (_, i) => i * 4 + 1);
+    const r = (await c('/games/keno/play', { bet: 2, picks })).body;
+    assert.equal(r.drawn.length, 10);
+    assert.equal(new Set(r.drawn).size, 10);
+    assert.ok(r.drawn.every(x => Number.isInteger(x) && x >= 1 && x <= 40));
+    assert.deepEqual(r.hits, r.drawn.filter(x => picks.includes(x)));
+    assert.equal(r.mult, KENO_PAY[n - 1][r.hits.length]);
+    approx(r.payout, Math.round(2 * r.mult * 100) / 100);
+    bal = Math.round((bal + r.net) * 100) / 100;
+    approx(r.wallet.balance, bal);
+  }
 });
 
 test('classement', async () => {

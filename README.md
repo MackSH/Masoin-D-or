@@ -1,6 +1,6 @@
 # Maison d’Or
 
-Casino en jetons virtuels (gratuits et sans valeur réelle) : 8 jeux et comptes joueurs. En ligne, le backend et la base tournent sur Supabase (fonction Edge + Postgres). En local, un serveur Node.js + SQLite équivalent.
+Casino en jetons virtuels (gratuits et sans valeur réelle) : 9 jeux et comptes joueurs. En ligne, le backend et la base tournent sur Supabase (fonction Edge + Postgres). En local, un serveur Node.js + SQLite équivalent.
 
 ## En ligne
 
@@ -51,6 +51,7 @@ Tests : `npm test`.
 | Plinko        | 8 rangées, 3 niveaux de risque, plusieurs billes à la suite   | ×29      |
 | Dés           | Plus de / moins de, seuil de 2 à 98                           | ×49,5    |
 | Pile ou face  | Une chance sur deux                                           | ×1,96    |
+| Keno          | 40 numéros, 10 tirés ; choisir de 1 à 10 numéros              | ×98      |
 
 ## Architecture
 
@@ -99,6 +100,7 @@ Vous pouvez créer un compte (identifiant et mot de passe haché avec scrypt) ou
 | POST    | `/games/dice/roll`                      | `bet, target, mode` (`over`/`under`) |
 | POST    | `/games/coin/flip`                      | `bet, pick` (0 = pile, 1 = face)   |
 | POST    | `/games/plinko/drop`                    | `bet, risk` (`low`/`mid`/`high`)   |
+| POST    | `/games/keno/play`                      | `bet, picks` (1 à 10 numéros de 1 à 40) |
 | GET/POST | `/games/mines/state`, `start`, `reveal`, `cashout` | `bet, mines` puis `tile` |
 | GET/POST | `/games/bj/state`, `deal`, `hit`, `stand`, `double` | `bet` pour `deal`    |
 | GET/POST | `/games/crash/state`, `launch`, `cashout`, `wait?round=` | `bet, auto?`    |

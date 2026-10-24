@@ -156,6 +156,7 @@ function createApp(db, { now = () => Date.now(), secureCookies = false } = {}) {
   api.post('/games/dice/roll', wrap(req => casino.dice(req.uid, body(req))));
   api.post('/games/coin/flip', wrap(req => casino.coin(req.uid, body(req))));
   api.post('/games/plinko/drop', wrap(req => casino.plinko(req.uid, body(req))));
+  api.post('/games/keno/play', wrap(req => casino.keno(req.uid, body(req))));
 
   api.get('/games/mines/state', wrap(req => casino.minesState(req.uid)));
   api.post('/games/mines/start', wrap(req => casino.minesStart(req.uid, body(req))));

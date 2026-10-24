@@ -145,6 +145,7 @@ routes['POST /games/roulette/spin'] = ({ uid, body }) => casino.roulette(uid, bo
 routes['POST /games/dice/roll'] = ({ uid, body }) => casino.dice(uid, body);
 routes['POST /games/coin/flip'] = ({ uid, body }) => casino.coin(uid, body);
 routes['POST /games/plinko/drop'] = ({ uid, body }) => casino.plinko(uid, body);
+routes['POST /games/keno/play'] = ({ uid, body }) => casino.keno(uid, body);
 
 routes['GET /games/mines/state'] = ({ uid }) => casino.minesState(uid);
 routes['POST /games/mines/start'] = ({ uid, body }) => casino.minesStart(uid, body);
