@@ -423,7 +423,7 @@ function renderPlayer() {
   const hr = new Date().getHours();
   $('#hello').textContent = `${hr < 5 ? 'Bonne nuit' : hr < 18 ? 'Bonjour' : 'Bonsoir'}, ${S.name}`;
 }
-const GNAME = { slots: 'Bandit d’Or', roulette: 'Roulette', bj: 'Blackjack', crash: 'Fusée', mines: 'Mines', plinko: 'Plinko', dice: 'Dés', coin: 'Pile ou face', depot: 'Dépôt de jetons', reset: 'Remise à zéro' };
+const GNAME = { slots: 'Bandit d’Or', roulette: 'Roulette', bj: 'Blackjack', crash: 'Fusée', mines: 'Mines', plinko: 'Plinko', dice: 'Dés', coin: 'Pile ou face', keno: 'Keno', depot: 'Dépôt de jetons', reset: 'Remise à zéro' };
 function ago(t) { const s = (Date.now() - t) / 1000; if (s < 60) return 'à l’instant'; if (s < 3600) return `il y a ${Math.floor(s / 60)} min`; if (s < 86400) return `il y a ${Math.floor(s / 3600)} h`; return `il y a ${Math.floor(s / 86400)} j`; }
 function renderPop() {
   $('#popBal').textContent = money(shown());
@@ -1206,6 +1206,87 @@ function gPlinko(root) {
   return () => { alive = false; cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener('keydown', key); balls.forEach(b => W.done('plinko', b.res)); balls = []; };
 }
 
+/* ================= Jeu : Keno ================= */
+function gKeno(root) {
+  // Même table que le serveur : PAY[choix - 1][bons numéros].
+  const PAY = [
+    [0, 3.88], [0, 1.86, 4.41], [0, .98, 3.04, 10.2], [0, .78, 1.76, 4.9, 22.1], [0, .24, 1.37, 4.02, 16.2, 35.3],
+    [0, 0, .98, 3.61, 6.86, 16.2, 39.2], [0, 0, .46, 2.94, 4.41, 13.7, 30.4, 58.8], [0, 0, 0, 2.16, 3.92, 12.7, 21.6, 53.9, 68.6],
+    [0, 0, 0, 1.52, 2.94, 7.84, 14.7, 43.1, 58.8, 83.3], [0, 0, 0, 1.37, 2.21, 4.41, 7.84, 16.7, 49, 78.4, 98]
+  ];
+  const MAX = 10;
+  root.innerHTML = `<div class="g-layout">
+    <div class="g-stage st-keno">
+      <div class="kn-grid">${Array.from({ length: 40 }, (_, i) => `<button class="kn-cell" data-n="${i + 1}" aria-pressed="false">${i + 1}</button>`).join('')}</div>
+      <div class="kn-pay" aria-label="Gains selon les bons numéros"></div>
+      <p class="g-msg" aria-live="polite">Choisissez jusqu’à 10 numéros, puis lancez le tirage.</p>
+    </div>
+    <div class="g-panel"><div class="bb"></div>
+      <div class="kn-acts"><button class="btn auto">Choix auto</button><button class="btn clear">Effacer</button></div>
+      <div class="stats3"><div class="stat"><span>Choisis</span><b class="sp">0 / 10</b></div><div class="stat"><span>Bons numéros</span><b class="sh">–</b></div><div class="stat"><span>Gain max</span><b class="sx">–</b></div></div>
+      <button class="btn-primary go">Lancer le tirage</button>
+      <p class="plab" style="margin:0">10 numéros sur 40 sont tirés. Plus vous en trouvez, plus le gain grimpe.</p>
+    </div></div>`;
+  const bet = betBox($('.bb', root), 'keno', 1);
+  const grid = $('.kn-grid', root), cells = $$('.kn-cell', root), payEl = $('.kn-pay', root), msg = $('.g-msg', root), go = $('.go', root);
+  const autoB = $('.auto', root), clearB = $('.clear', root);
+  let picks = new Set(), busy = false, alive = true, pending = null;
+  function renderPay(hits = -1) {
+    const n = picks.size;
+    $('.sp', root).textContent = `${n} / ${MAX}`;
+    $('.sx', root).textContent = n ? fmtX(PAY[n - 1][n]) : '–';
+    if (!n) { payEl.innerHTML = '<span class="kn-hint">Les gains s’affichent ici dès le premier numéro choisi.</span>'; return; }
+    payEl.innerHTML = PAY[n - 1].map((m, k) => m ? `<span class="kn-chip${k === hits ? ' on' : ''}" data-k="${k}"><i>${k}</i>${fmtX(m)}</span>` : '').join('');
+  }
+  function clearDraw() { cells.forEach(c => c.classList.remove('drawn', 'hit', 'miss')); $('.sh', root).textContent = '–'; }
+  function sync() { cells.forEach(c => c.setAttribute('aria-pressed', String(picks.has(+c.dataset.n)))); renderPay(); }
+  function lock(b) { busy = b; go.disabled = b; autoB.disabled = b; clearB.disabled = b; bet.disabled = b; cells.forEach(c => c.disabled = b); }
+  grid.addEventListener('click', e => {
+    const c = e.target.closest('.kn-cell'); if (!c || busy) return;
+    const n = +c.dataset.n; clearDraw();
+    if (picks.has(n)) picks.delete(n);
+    else if (picks.size >= MAX) { msg.textContent = 'Dix numéros au maximum.'; sfx.lose(); return; }
+    else picks.add(n);
+    sfx.gem(picks.size); sync();
+    msg.textContent = picks.size ? `${picks.size} numéro${picks.size > 1 ? 's' : ''} choisi${picks.size > 1 ? 's' : ''}.` : 'Choisissez jusqu’à 10 numéros, puis lancez le tirage.';
+  });
+  autoB.onclick = () => {
+    if (busy) return; clearDraw();
+    const n = picks.size || 5; picks = new Set(shuffle(Array.from({ length: 40 }, (_, i) => i + 1)).slice(0, n));
+    sync(); sfx.whoosh(); msg.textContent = `${n} numéros choisis au hasard.`;
+    if (!reduce) cells.filter(c => picks.has(+c.dataset.n)).forEach((c, i) => c.animate([{ transform: 'scale(.6)' }, { transform: 'scale(1.15)' }, { transform: 'none' }], { duration: 350, delay: i * 40 }));
+  };
+  clearB.onclick = () => { if (busy) return; picks.clear(); clearDraw(); sync(); sfx.click(); msg.textContent = 'Grille effacée.'; };
+  async function draw() {
+    if (busy) return;
+    if (!picks.size) { msg.textContent = 'Choisissez au moins un numéro.'; sfx.lose(); return; }
+    const b = bet.value; if (!W.can(b)) return;
+    lock(true); clearDraw(); renderPay();
+    const r = await play('/games/keno/play', { bet: b, picks: [...picks] });
+    if (!r) return lock(false);
+    W.hold(r); if (!alive) return W.done('keno', r);
+    pending = r; msg.textContent = 'Tirage en cours…'; sfx.launch();
+    let found = 0;
+    for (const n of r.drawn) {
+      await sleep(reduce ? 40 : 230); if (!alive) return;
+      const c = cells[n - 1], hit = picks.has(n);
+      c.classList.add('drawn', hit ? 'hit' : 'miss');
+      if (hit) { found++; sfx.gem(found + 2); $('.sh', root).textContent = found; renderPay(found); } else sfx.peg();
+    }
+    await sleep(reduce ? 0 : 300); if (!alive) return;
+    pending = null; W.done('keno', r);
+    $('.sh', root).textContent = r.hits.length; renderPay(r.hits.length);
+    if (r.payout > 0) {
+      msg.textContent = `${r.hits.length} bon${r.hits.length > 1 ? 's' : ''} numéro${r.hits.length > 1 ? 's' : ''} : ${fmtX(r.mult)}, ${r.net >= 0 ? '+' : ''}${money(r.net)}`;
+      if (r.mult > 1) celebrate(grid, r.mult, r.payout); else { sfx.coin(); floatText(grid, '+' + money(r.payout)); }
+    } else { msg.textContent = `${r.hits.length} bon${r.hits.length > 1 ? 's' : ''} numéro${r.hits.length > 1 ? 's' : ''}. Pas de gain cette fois.`; defeat(grid); }
+    lock(false);
+  }
+  go.onclick = draw; sync();
+  const key = spaceKey(draw); document.addEventListener('keydown', key);
+  return () => { alive = false; document.removeEventListener('keydown', key); if (pending) W.done('keno', pending); };
+}
+
 /* ================= Catalogue ================= */
 const die = (n, cls = '') => { const on = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] }[n]; return `<span class="die ${cls}">${Array.from({ length: 9 }, (_, i) => `<i class="${on.includes(i + 1) ? 'on' : ''}"></i>`).join('')}</span>`; };
 const plinkoArt = (() => { let s = ''; for (let r = 0; r < 5; r++) for (let j = 0; j < r + 3; j++) s += `<circle cx="${80 + (j - (r + 2) / 2) * 20}" cy="${22 + r * 17}" r="3.2" fill="#e8f4f6"/>`; return `<svg class="a-plinko" viewBox="0 0 160 120" aria-hidden="true">${s}<rect x="22" y="104" width="22" height="11" rx="3" fill="#d12c45"/><rect x="47" y="104" width="20" height="11" rx="3" fill="#e8833a"/><rect x="70" y="104" width="20" height="11" rx="3" fill="#f0d36a"/><rect x="93" y="104" width="20" height="11" rx="3" fill="#e8833a"/><rect x="116" y="104" width="22" height="11" rx="3" fill="#d12c45"/><circle cx="90" cy="47" r="6.5" fill="#e7bf5a" stroke="#8a6a22" stroke-width="1.5"/></svg>`; })();
@@ -1221,6 +1302,8 @@ const GAMES = [
     art: `<div class="a-mines">${[0, 1, 0, 0, 1, 2, 1, 0, 0].map(t => `<i class="${t ? 'o' : ''}">${t === 1 ? '<svg viewBox="0 0 100 100"><use href="#s-gem"/></svg>' : t === 2 ? '<svg viewBox="0 0 100 100"><use href="#i-bomb"/></svg>' : ''}</i>`).join('')}</div>` },
   { id: 'plinko', name: 'Plinko', cat: 'instant', tag: 'Billes', max: '×29', c: ['#13788f', '#06303b'], mount: gPlinko, art: plinkoArt },
   { id: 'dice', name: 'Dés', cat: 'instant', tag: 'Plus ou moins', max: '×49,5', c: ['#a8661a', '#4a2a08'], mount: gDice, art: `<div class="a-dice">${die(5)}${die(3)}</div>` },
+  { id: 'keno', name: 'Keno', cat: 'instant', tag: 'Tirage de numéros', max: '×98', badge: 'Nouveau', c: ['#1d5f96', '#0a2140'], mount: gKeno,
+    art: `<div class="a-keno">${Array.from({ length: 12 }, (_, i) => `<i class="${[1, 4, 6, 10].includes(i) ? 'h' : [2, 8].includes(i) ? 'd' : ''}">${[7, 12, 3, 25, 18, 31, 9, 40, 22, 5, 14, 36][i]}</i>`).join('')}</div>` },
   { id: 'coin', name: 'Pile ou face', cat: 'instant', tag: 'Une chance sur deux', max: '×1,96', c: ['#3d4f5c', '#141c22'], mount: gCoin, art: `<div class="a-coin">P</div>` }
 ];
 

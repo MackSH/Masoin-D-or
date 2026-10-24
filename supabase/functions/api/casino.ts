@@ -28,7 +28,7 @@ function toCents(x: unknown, what = 'mise') {
 const fromCents = (c: number) => c / 100;
 
 /* ---------- Définitions des jeux ---------- */
-export const GAMES = ['slots', 'roulette', 'bj', 'crash', 'mines', 'plinko', 'dice', 'coin'];
+export const GAMES = ['slots', 'roulette', 'bj', 'crash', 'mines', 'plinko', 'dice', 'coin', 'keno'];
 const DEPOSITS = [500, 1000, 2500, 10000];
 
 const SLOT_SYMBOLS: [string, number][] = [['cherry', 22], ['lemon', 22], ['bell', 16], ['gem', 12], ['bar', 8], ['seven', 4]];
@@ -49,6 +49,22 @@ const PLINKO_SETS: Record<string, number[]> = {
 };
 
 const COIN_MULT = 1.96;
+
+// Keno : 40 numéros, 10 tirés, le joueur en choisit de 1 à 10.
+// KENO_PAY[choix - 1][bons numéros] = multiplicateur (environ 97 % de retour pour chaque nombre de choix).
+const KENO_POOL = 40, KENO_DRAW = 10;
+const KENO_PAY = [
+  [0, 3.88],
+  [0, 1.86, 4.41],
+  [0, 0.98, 3.04, 10.2],
+  [0, 0.78, 1.76, 4.9, 22.1],
+  [0, 0.24, 1.37, 4.02, 16.2, 35.3],
+  [0, 0, 0.98, 3.61, 6.86, 16.2, 39.2],
+  [0, 0, 0.46, 2.94, 4.41, 13.7, 30.4, 58.8],
+  [0, 0, 0, 2.16, 3.92, 12.7, 21.6, 53.9, 68.6],
+  [0, 0, 0, 1.52, 2.94, 7.84, 14.7, 43.1, 58.8, 83.3],
+  [0, 0, 0, 1.37, 2.21, 4.41, 7.84, 16.7, 49, 78.4, 98]
+];
 
 const CRASH_K = 0.00018; // multiplicateur = exp(K × millisecondes)
 const CRASH_MAX = 500;
@@ -216,6 +232,19 @@ export function createCasino(sql: Sql, now = () => Date.now()) {
     const result = randInt(2), win = result === p;
     const res = await settle(t, id, 'coin', stake, win ? stake * COIN_MULT : 0, { r: result });
     return { result, win, mult: COIN_MULT, ...res, wallet: await wallet(t, id) };
+  });
+
+  /* ---------- Keno ---------- */
+  // deno-lint-ignore no-explicit-any
+  const keno = tx(async (t, id, { bet, picks }: any) => {
+    const chosen = Array.isArray(picks) ? [...new Set(picks.map(Number))] : [];
+    if (!chosen.length || chosen.length > KENO_DRAW || chosen.length !== (picks as unknown[]).length || chosen.some(n => !Number.isInteger(n) || n < 1 || n > KENO_POOL)) throw bad('Choisissez de 1 à 10 numéros différents entre 1 et 40.');
+    const stake = toCents(bet);
+    await debit(t, id, stake);
+    const drawn = shuffle(Array.from({ length: KENO_POOL }, (_, i) => i + 1)).slice(0, KENO_DRAW);
+    const hits = drawn.filter(n => chosen.includes(n)), mult = KENO_PAY[chosen.length - 1][hits.length];
+    const res = await settle(t, id, 'keno', stake, stake * mult, { picks: chosen.length, hits: hits.length, mult });
+    return { drawn, hits, mult, ...res, wallet: await wallet(t, id) };
   });
 
   /* ---------- Plinko ---------- */
@@ -409,7 +438,7 @@ export function createCasino(sql: Sql, now = () => Date.now()) {
 
   return {
     wallet: (id: number) => wallet(sql, id), deposit, reset, history, gameHistory, leaderboard,
-    slots, roulette, dice, coin, plinko,
+    slots, roulette, dice, coin, plinko, keno,
     minesStart, minesReveal, minesCashout, minesState,
     bjDeal, bjHit, bjStand, bjDouble, bjState,
     crashLaunch, crashCashout, crashResolve, crashResult, crashRemaining, crashState, crashSweep
